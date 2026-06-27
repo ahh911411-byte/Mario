@@ -1,0 +1,9 @@
+{
+  "name": "Super Level Infinitum",
+  "short_name": "Mario Infinite",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0f1423",
+  "theme_color": "#0f1423",
+  "orientation": "landscape"
+}
