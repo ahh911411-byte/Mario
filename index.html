@@ -4,23 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Super Level Infinitum - Universal Sync</title>
-    
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Mario Infinite">
-
-    <link rel="manifest" href="manifest.json">
-
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log("ServiceWorker erfolgreich registriert!", reg.scope))
-            .catch(err => console.log("ServiceWorker Fehler:", err));
-        });
-      }
-    </script>
-
     <style>
         * {
             margin: 0;
@@ -191,11 +174,11 @@ function stopMusic() {
     musicMain.currentTime = 0;
 }
 
-// --- BALANCIERTE UNIVERSAL-WERTE ---
+// --- PERFEKT BALANCIERTE UNIVERSAL-WERTE ---
 const GRAVITY = 0.4;         
 const JUMP_FORCE = 12.5;       
 const MAX_FALL_SPEED = 12.0;   
-const ACCELERATION = 1.0;     
+const ACCELERATION = 1.0;     // Deine gewünschte Beschleunigung bleibt auf 1!
 const FRICTION = 0.15;      
 const PLAYER_MAX_SPEED = 5.2; 
 
@@ -207,7 +190,10 @@ let animationTimer = 0;
 let goombaSpawnCooldown = 0; 
 let restartEnableTime = 0; 
 
+// Zeitmessung für Delta-Time
 let lastTime = performance.now();
+
+// Distanzzähler zur Berechnung der Beinbewegung
 let walkDistanceCounter = 0;
 
 const keys = { right: false, left: false, up: false, down: false, jumpPressed: false };
@@ -222,6 +208,7 @@ window.addEventListener('keydown', (e) => {
     
     if ((gameState === 'GAMEOVER' || gameState === 'WIN') && e.code === 'KeyR') {
         if (Date.now() < restartEnableTime) return; 
+        
         gameState = 'PLAYING';
         startNewGame();
         playSound(soundStart);
@@ -398,16 +385,11 @@ function triggerWinningSequence() {
     playSound(soundComplete);
 }
 
-// Hilfsfunktion für extrem schnelle Kollisions-Checks
-function isColliding(rect1, rect2) {
-    return rect1.x < rect2.x + rect2.width &&
-           rect1.x + rect1.width > rect2.x &&
-           rect1.y < rect2.y + rect2.height &&
-           rect1.y + rect1.height > rect2.y;
-}
-
 function update(dt) {
+    // Falls das iPad laggt, deckeln wir dt, damit Mario nicht durch Wände teleportiert
     if (dt > 0.1) dt = 0.1;
+    
+    // EXAKTER UNIVERSELLER TIMING MODIFIER (Gleicht Ruckler und FPS-Unterschiede perfekt aus!)
     let modifier = dt * 60;
 
     if (gameState === 'DYING') {
@@ -444,11 +426,12 @@ function update(dt) {
         player.y -= 20;      
     }
 
+    // Goomba Spawner Zeitbasiert korrigiert für langsame Bildschirme
     if (goombaSpawnCooldown > 0) {
         goombaSpawnCooldown -= dt;
     } else {
         if (player.x < flagPole.x - 500) {
-            if (Math.random() < 0.3) { 
+            if (Math.random() < 0.3) { // Leicht erhöhte Chance pro Sekunde
                 let spawnX = cameraX + canvas.width + 40;
                 let speedMultiplier = 1.3 + (Math.random() * 0.5) + (currentLevel * 0.1);
                 
@@ -469,14 +452,11 @@ function update(dt) {
     let currentMaxSpeed = player.isDucking ? PLAYER_MAX_SPEED * 0.25 : PLAYER_MAX_SPEED;
     let currentAcc = player.isDucking ? ACCELERATION * 0.2 : ACCELERATION;
 
-    // Horizontale Geschwindigkeit berechnen
     if (keys.right) {
-        if (player.velocityX < 1.2) player.velocityX = 1.2; 
         player.velocityX += currentAcc * modifier;
         if (player.velocityX > currentMaxSpeed) player.velocityX = currentMaxSpeed;
         player.facing = 'right';
     } else if (keys.left) {
-        if (player.velocityX > -1.2) player.velocityX = -1.2;
         player.velocityX -= currentAcc * modifier;
         if (player.velocityX < -currentMaxSpeed) player.velocityX = -currentMaxSpeed;
         player.facing = 'left';
@@ -489,27 +469,6 @@ function update(dt) {
         walkDistanceCounter += Math.abs(player.velocityX) * modifier;
     }
 
-    // --- PHASE 1: NUR X-ACHSE BEWEGEN UND KOLLISION PRÜFEN ---
-    player.x += player.velocityX * modifier;
-    if (player.x < 0) {
-        player.x = 0;
-        player.velocityX = 0;
-    }
-
-    platforms.forEach(plat => {
-        if (isColliding(player, plat)) {
-            // Links/Rechts Kollision
-            if (player.velocityX > 0) {
-                player.x = plat.x - player.width;
-                player.velocityX = 0;
-            } else if (player.velocityX < 0) {
-                player.x = plat.x + plat.width;
-                player.velocityX = 0;
-            }
-        }
-    });
-
-    // --- PHASE 2: NUR Y-ACHSE BEWEGEN UND KOLLISION PRÜFEN ---
     if (player.velocityY < 0 && !keys.jumpPressed) {
         player.velocityY += (GRAVITY * 2.5) * modifier; 
     } else {
@@ -518,63 +477,80 @@ function update(dt) {
 
     if (player.velocityY > MAX_FALL_SPEED) player.velocityY = MAX_FALL_SPEED;
     
+    player.x += player.velocityX * modifier;
     player.y += player.velocityY * modifier;
     player.grounded = false;
 
+    if (player.x < 0) {
+        player.x = 0;
+        player.velocityX = 0;
+    }
+
     platforms.forEach(plat => {
-        if (isColliding(player, plat)) {
-            // Oben/Unten Kollision
-            if (player.velocityY > 0) { // Wir fallen
-                player.y = plat.y - player.height;
-                player.velocityY = 0;
-                player.grounded = true;
-            } else if (player.velocityY < 0) { // Wir springen hoch gegen den Block
-                player.y = plat.y + plat.height;
-                player.velocityY = 0;
-                if(plat.type === 'lucky') {
-                    plat.type = 'used';
-                    score += 5;
-                    playSound(soundCoin); 
+        if (player.x < plat.x + plat.width && player.x + player.width > plat.x &&
+            player.y < plat.y + plat.height && player.y + player.height > plat.y) {
+            
+            let overlapX = Math.min(player.x + player.width, plat.x + plat.width) - Math.max(player.x, plat.x);
+            let overlapY = Math.min(player.y + player.height, plat.y + plat.height) - Math.max(player.y, plat.y);
+
+            if (overlapX > overlapY) {
+                if (player.velocityY > 0 && player.y + player.height - (player.velocityY * modifier) <= plat.y + 12) {
+                    player.y -= overlapY;
+                    player.velocityY = 0;
+                    player.grounded = true;
+                } else if (player.velocityY < 0) {
+                    player.y += overlapY;
+                    player.velocityY = 0;
+                    if(plat.type === 'lucky') {
+                        plat.type = 'used';
+                        score += 5;
+                        playSound(soundCoin); 
+                    }
                 }
+            } else {
+                if (player.velocityX > 0 && player.x + player.width - (player.velocityX * modifier) <= plat.x + 6) player.x -= overlapX;
+                else if (player.velocityX < 0 && player.x - (player.velocityX * modifier) >= plat.x + plat.width - 6) player.x += overlapX;
             }
         }
     });
 
-    // --- GEGNER UPDATE (Ebenfalls auf saubere 2-Phasen-Kollision umgestellt) ---
     enemies.forEach(enemy => {
         if (!enemy.alive) {
             if (enemy.y < canvas.height + 50) enemy.y += 4 * modifier;
             return;
         }
 
-        // Gegner X-Bewegung
-        enemy.x += enemy.speed * modifier;
-        platforms.forEach(plat => {
-            if (isColliding(enemy, plat)) {
-                if (plat.type === 'pipe' || plat.type === 'block' || plat.type === 'used') {
-                    if (enemy.speed > 0) enemy.x = plat.x - enemy.width;
-                    else enemy.x = plat.x + plat.width;
-                    enemy.speed *= -1;
-                }
-            }
-        });
-
-        // Gegner Y-Bewegung
         enemy.velocityY += GRAVITY * modifier;
         if (enemy.velocityY > MAX_FALL_SPEED) enemy.velocityY = MAX_FALL_SPEED;
-        enemy.y += enemy.velocityY * modifier;
         
+        enemy.x += enemy.speed * modifier;
+        enemy.y += enemy.velocityY * modifier;
+
         platforms.forEach(plat => {
-            if (isColliding(enemy, plat)) {
-                if (enemy.velocityY > 0) {
-                    enemy.y = plat.y - enemy.height;
-                    enemy.velocityY = 0;
+            if (enemy.x < plat.x + plat.width && enemy.x + enemy.width > plat.x &&
+                enemy.y < plat.y + plat.height && enemy.y + enemy.height > plat.y) {
+                
+                let overlapX = Math.min(enemy.x + enemy.width, plat.x + plat.width) - Math.max(enemy.x, plat.x);
+                let overlapY = Math.min(enemy.y + enemy.height, plat.y + plat.height) - Math.max(enemy.y, plat.y);
+
+                if (overlapX > overlapY) {
+                    if (enemy.velocityY > 0 && enemy.y + enemy.height - (enemy.velocityY * modifier) <= plat.y + 8) {
+                        enemy.y -= overlapY;
+                        enemy.velocityY = 0;
+                    }
+                } else {
+                    if (plat.type === 'pipe' || plat.type === 'block' || plat.type === 'used') {
+                        if (enemy.speed > 0 && enemy.x + enemy.width - (enemy.speed * modifier) <= plat.x + 6) enemy.speed *= -1;
+                        else if (enemy.speed < 0 && enemy.x - (enemy.speed * modifier) >= plat.x + plat.width - 6) enemy.speed *= -1;
+                    }
                 }
             }
         });
 
-        // Check Spieler vs Gegner
-        if (isColliding(player, enemy)) {
+        if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
+            player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) {
+            
+            // Bombensichere Abfrage: Im Sinkflug wird IMMER gekillt, Toleranzbereich an variable Frameraten angepasst
             if (player.velocityY > 0 && (player.y + player.height) <= enemy.y + 24) {
                 enemy.alive = false;
                 player.velocityY = -JUMP_FORCE * 0.65; 
@@ -588,7 +564,6 @@ function update(dt) {
         if (enemy.y > canvas.height) enemy.alive = false;
     });
 
-    // --- MÜNZEN & ZIEL ---
     coins.forEach(coin => {
         if (!coin.collected && player.x < coin.x + 20 && player.x + player.width > coin.x &&
             player.y < coin.y + coinHeightCheck() && player.y + player.height > coin.y) {
