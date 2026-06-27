@@ -41,7 +41,7 @@
         canvas {
             background: linear-gradient(to bottom, #5c94fc 0%, #98f8f8 70%, #b8f818 100%);
             display: block;
-            image-rendering: pixelated; 
+            image-rendering: pixelated;
         }
         .controls-hint {
             margin-top: 15px;
@@ -60,7 +60,6 @@
             font-weight: bold;
             box-shadow: 0 2px #999;
         }
-
         #touchControls {
             display: none;
             position: absolute;
@@ -100,9 +99,9 @@
             box-shadow: 0 1px rgba(0,0,0,0.4);
             background: rgba(255, 255, 255, 0.5);
         }
-        #btnLeft { position: absolute; left: 0; top: 40px; width: 45px; height: 40px; }
-        #btnRight { position: absolute; right: 0; top: 40px; width: 45px; height: 40px; }
-        #btnDown { position: absolute; left: 40px; bottom: 0; width: 40px; height: 45px; }
+        #btnLeft  { position: absolute; left: 0;   top: 40px; width: 45px; height: 40px; }
+        #btnRight { position: absolute; right: 0;  top: 40px; width: 45px; height: 40px; }
+        #btnDown  { position: absolute; left: 40px; bottom: 0; width: 40px; height: 45px; }
         .action-buttons { gap: 15px; }
         .action-btn { width: 65px; height: 65px; border-radius: 50%; font-size: 1.2rem; }
         #btnStart {
@@ -120,104 +119,79 @@
 </head>
 <body>
 
-    <h1>Super Level Infinitum</h1>
-    <div id="gameContainer">
-        <canvas id="gameCanvas" width="800" height="450"></canvas>
-        
-        <div id="touchControls">
-            <div class="dpad">
-                <div class="touch-btn" id="btnLeft">◀</div>
-                <div class="touch-btn" id="btnRight">▶</div>
-                <div class="touch-btn" id="btnDown">▼</div>
-            </div>
-            <div class="touch-btn" id="btnStart">START / R</div>
-            <div class="action-buttons">
-                <div class="touch-btn action-btn" id="btnJump">▲</div>
-            </div>
+<h1>Super Level Infinitum</h1>
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+    <div id="touchControls">
+        <div class="dpad">
+            <div class="touch-btn" id="btnLeft">◀</div>
+            <div class="touch-btn" id="btnRight">▶</div>
+            <div class="touch-btn" id="btnDown">▼</div>
+        </div>
+        <div class="touch-btn" id="btnStart">START / R</div>
+        <div class="action-buttons">
+            <div class="touch-btn action-btn" id="btnJump">▲</div>
         </div>
     </div>
-    <div class="controls-hint" id="keyboardHint">
-        <span class="key">A</span> / <span class="key">D</span> Laufen | <span class="key">W</span> Schwebesprung | <span class="key">S</span> Ducken
-    </div>
+</div>
+<div class="controls-hint" id="keyboardHint">
+    <span class="key">A</span> / <span class="key">D</span> Laufen |
+    <span class="key">W</span> Schwebesprung |
+    <span class="key">S</span> Ducken
+</div>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- SOUND EFFECTS & MUSIC ---
-const soundStart = new Audio('audio/sounds/here_we_go.wav');
-const soundCoin = new Audio('audio/sounds/coin.mp3');
-const soundStomp = new Audio('audio/sounds/goomba_stomp.mp3');
+// --- SOUND ---
+const soundStart    = new Audio('audio/sounds/here_we_go.wav');
+const soundCoin     = new Audio('audio/sounds/coin.mp3');
+const soundStomp    = new Audio('audio/sounds/goomba_stomp.mp3');
 const soundComplete = new Audio('audio/sounds/level_complete.mp3');
-const soundDeath = new Audio('audio/sounds/death.mp3');
-
+const soundDeath    = new Audio('audio/sounds/death.mp3');
 soundComplete.volume = 0.4;
-
 const musicMain = new Audio('audio/sounds/main_theme.mp3');
 musicMain.loop = true;
-musicMain.volume = 0.2; 
+musicMain.volume = 0.2;
 
-function playSound(audioObject) {
-    audioObject.currentTime = 0;
-    audioObject.play().catch(e => console.log("Audio blockiert:", e));
-}
-
+function playSound(a) { a.currentTime = 0; a.play().catch(e => {}); }
 function stopAllSounds() {
-    [soundStart, soundCoin, soundStomp, soundComplete, soundDeath].forEach(sound => {
-        sound.pause();
-        sound.currentTime = 0;
-    });
+    [soundStart, soundCoin, soundStomp, soundComplete, soundDeath].forEach(s => { s.pause(); s.currentTime = 0; });
 }
+function stopMusic() { musicMain.pause(); musicMain.currentTime = 0; }
 
-function stopMusic() {
-    musicMain.pause();
-    musicMain.currentTime = 0;
-}
+// --- PHYSIK ---
+const GRAVITY        = 0.4;
+const JUMP_FORCE     = 12.5;
+const MAX_FALL_SPEED = 12.0;
+const ACCELERATION   = 1.0;
+const FRICTION       = 0.15;
+const PLAYER_MAX_SPEED = 5.2;
 
-// --- PERFEKT BALANCIERTE UNIVERSAL-WERTE ---
-const GRAVITY = 0.4;         
-const JUMP_FORCE = 12.5;       
-const MAX_FALL_SPEED = 12.0;   
-const ACCELERATION = 1.0;     // Deine gewünschte Beschleunigung bleibt auf 1!
-const FRICTION = 0.15;      
-const PLAYER_MAX_SPEED = 5.2; 
-
-// --- GAME STATE ---
-let gameState = 'MENU'; 
-let score = 0;
-let currentLevel = 1;
-let animationTimer = 0;
-let goombaSpawnCooldown = 0; 
-let restartEnableTime = 0; 
-
-// Zeitmessung für Delta-Time
-let lastTime = performance.now();
-
-// Distanzzähler zur Berechnung der Beinbewegung
+// --- STATE ---
+let gameState       = 'MENU';
+let score           = 0;
+let currentLevel    = 1;
+let animationTimer  = 0;
+let goombaSpawnCooldown = 0;
+let restartEnableTime   = 0;
+let lastTime        = performance.now();
 let walkDistanceCounter = 0;
 
 const keys = { right: false, left: false, up: false, down: false, jumpPressed: false };
 
-window.addEventListener('keydown', (e) => {
+window.addEventListener('keydown', e => {
     if (gameState === 'MENU' && e.code === 'Enter') {
-        gameState = 'PLAYING';
-        stopAllSounds();
-        playSound(soundStart);
-        playSound(musicMain);
+        gameState = 'PLAYING'; stopAllSounds(); playSound(soundStart); playSound(musicMain);
     }
-    
     if ((gameState === 'GAMEOVER' || gameState === 'WIN') && e.code === 'KeyR') {
-        if (Date.now() < restartEnableTime) return; 
-        
-        gameState = 'PLAYING';
-        startNewGame();
-        playSound(soundStart);
-        playSound(musicMain);
+        if (Date.now() < restartEnableTime) return;
+        gameState = 'PLAYING'; startNewGame(); playSound(soundStart); playSound(musicMain);
     }
-
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = true;
-    if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = true;
-    if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.down = true;
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft')  keys.left  = true;
+    if (e.code === 'KeyS' || e.code === 'ArrowDown')  keys.down  = true;
     if (e.code === 'KeyW' || e.code === 'Space' || e.code === 'ArrowUp') {
         keys.jumpPressed = true;
         if (!keys.up && player.grounded && gameState === 'PLAYING' && !player.isDucking) {
@@ -227,15 +201,11 @@ window.addEventListener('keydown', (e) => {
         keys.up = true;
     }
 });
-
-window.addEventListener('keyup', (e) => {
+window.addEventListener('keyup', e => {
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = false;
-    if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = false;
-    if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.down = false;
-    if (e.code === 'KeyW' || e.code === 'Space' || e.code === 'ArrowUp') {
-        keys.up = false;
-        keys.jumpPressed = false;
-    }
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft')  keys.left  = false;
+    if (e.code === 'KeyS' || e.code === 'ArrowDown')  keys.down  = false;
+    if (e.code === 'KeyW' || e.code === 'Space' || e.code === 'ArrowUp') { keys.up = false; keys.jumpPressed = false; }
 });
 
 function setupTouchControls() {
@@ -244,551 +214,439 @@ function setupTouchControls() {
         document.getElementById('touchControls').style.display = 'flex';
         document.getElementById('keyboardHint').style.display = 'none';
     }
-
-    const bindTouch = (id, pressAction, releaseAction) => {
+    const bind = (id, press, release) => {
         const el = document.getElementById(id);
-        el.addEventListener('touchstart', (e) => { e.preventDefault(); pressAction(); });
-        el.addEventListener('touchend', (e) => { e.preventDefault(); if(releaseAction) releaseAction(); });
+        el.addEventListener('touchstart', e => { e.preventDefault(); press(); });
+        el.addEventListener('touchend',   e => { e.preventDefault(); if (release) release(); });
     };
-
-    bindTouch('btnLeft', () => keys.left = true, () => keys.left = false);
-    bindTouch('btnRight', () => keys.right = true, () => keys.right = false);
-    bindTouch('btnDown', () => keys.down = true, () => keys.down = false);
-    
-    bindTouch('btnJump', () => {
+    bind('btnLeft',  () => keys.left  = true, () => keys.left  = false);
+    bind('btnRight', () => keys.right = true, () => keys.right = false);
+    bind('btnDown',  () => keys.down  = true, () => keys.down  = false);
+    bind('btnJump', () => {
         keys.jumpPressed = true;
         if (!keys.up && player.grounded && gameState === 'PLAYING' && !player.isDucking) {
-            player.velocityY = -JUMP_FORCE;
-            player.grounded = false;
+            player.velocityY = -JUMP_FORCE; player.grounded = false;
         }
         keys.up = true;
-    }, () => {
-        keys.up = false;
-        keys.jumpPressed = false;
-    });
-    
-    bindTouch('btnStart', () => {
+    }, () => { keys.up = false; keys.jumpPressed = false; });
+    bind('btnStart', () => {
         if (gameState === 'MENU') {
-            gameState = 'PLAYING';
-            stopAllSounds();
-            playSound(soundStart);
-            playSound(musicMain);
+            gameState = 'PLAYING'; stopAllSounds(); playSound(soundStart); playSound(musicMain);
         } else if (gameState === 'GAMEOVER' || gameState === 'WIN') {
-            if (Date.now() < restartEnableTime) return; 
-            gameState = 'PLAYING';
-            startNewGame();
-            playSound(soundStart);
-            playSound(musicMain);
+            if (Date.now() < restartEnableTime) return;
+            gameState = 'PLAYING'; startNewGame(); playSound(soundStart); playSound(musicMain);
         }
     });
 }
 
-const player = {
-    x: 120, y: 300, width: 32, height: 48,
-    velocityX: 0, velocityY: 0,
-    grounded: false, facing: 'right', isDucking: false
-};
-
-let platforms = [];
-let coins = [];
-let enemies = [];
+const player = { x: 120, y: 300, width: 32, height: 48, velocityX: 0, velocityY: 0, grounded: false, facing: 'right', isDucking: false };
+let platforms = [], coins = [], enemies = [];
 const flagPole = { x: 2500, y: 130, width: 10, height: 270 };
 let cameraX = 0;
 
-function startNewGame() {
-    currentLevel = 1;
-    score = 0;
-    resetLevel();
-}
+function startNewGame() { currentLevel = 1; score = 0; resetLevel(); }
 
 function generateProceduralLevel() {
-    platforms = [];
-    coins = [];
-    enemies = [];
-
-    platforms.push({ x: 0, y: 400, width: 500, height: 50, type: 'ground' });
-    platforms.push({ x: 120, y: 240, width: 32, height: 32, type: 'block' });
-    platforms.push({ x: 152, y: 240, width: 32, height: 32, type: 'lucky' });
-    coins.push({ x: 158, y: 200, collected: false }); 
+    platforms = []; coins = []; enemies = [];
+    platforms.push({ x: 0,   y: 400, width: 500, height: 50, type: 'ground' });
+    platforms.push({ x: 120, y: 240, width: 32,  height: 32, type: 'block'  });
+    platforms.push({ x: 152, y: 240, width: 32,  height: 32, type: 'lucky'  });
+    coins.push({ x: 158, y: 200, collected: false });
 
     let currentX = 500;
     const endX = 2400;
-    let holeChance = Math.min(0.08 + (currentLevel * 0.02), 0.25);
+    const holeChance = Math.min(0.08 + currentLevel * 0.02, 0.25);
 
     while (currentX < endX) {
-        let r = Math.random();
-
+        const r = Math.random();
         if (r < holeChance && currentX < endX - 300) {
-            let holeWidth = 90 + Math.random() * 30; 
-            currentX += holeWidth;
-            
-            let platformWidth = 250 + Math.random() * 150;
-            platforms.push({ x: currentX, y: 400, width: platformWidth, height: 50, type: 'ground' });
-            currentX += platformWidth;
+            currentX += 90 + Math.random() * 30;
+            const w = 250 + Math.random() * 150;
+            platforms.push({ x: currentX, y: 400, width: w, height: 50, type: 'ground' });
+            currentX += w;
         } else {
-            let platformWidth = 250 + Math.random() * 200;
-            platforms.push({ x: currentX, y: 400, width: platformWidth, height: 50, type: 'ground' });
-
-            let structRand = Math.random();
-            
-            if (structRand < 0.25) {
+            const w = 250 + Math.random() * 200;
+            platforms.push({ x: currentX, y: 400, width: w, height: 50, type: 'ground' });
+            const s = Math.random();
+            if (s < 0.25) {
                 platforms.push({ x: currentX + 60, y: 320, width: 64, height: 80, type: 'pipe' });
-            } 
-            else if (structRand < 0.65) {
-                let blockY = 250;
-                let numBlocks = 3 + Math.floor(Math.random() * 3); 
-                
-                for(let b = 0; b < numBlocks; b++) {
-                    let bType = (b === 1 || b === 3) ? 'lucky' : 'block';
-                    platforms.push({ x: currentX + 40 + (b * 32), y: blockY, width: 32, height: 32, type: bType });
-                    coins.push({ x: currentX + 46 + (b * 32), y: blockY - 40, collected: false });
+            } else if (s < 0.65) {
+                const numBlocks = 3 + Math.floor(Math.random() * 3);
+                for (let b = 0; b < numBlocks; b++) {
+                    platforms.push({ x: currentX + 40 + b * 32, y: 250, width: 32, height: 32, type: (b === 1 || b === 3) ? 'lucky' : 'block' });
+                    coins.push({ x: currentX + 46 + b * 32, y: 210, collected: false });
                 }
             }
-
-            currentX += platformWidth;
+            currentX += w;
         }
     }
-
     platforms.push({ x: endX, y: 400, width: 300, height: 50, type: 'ground' });
     flagPole.x = endX + 120;
 }
 
 function resetLevel() {
-    player.x = 120;
-    player.y = 300;
-    player.height = 48;
-    player.velocityX = 0;
-    player.velocityY = 0;
-    player.grounded = false;
-    player.isDucking = false;
-    cameraX = 0;
-    goombaSpawnCooldown = 1.5; 
-    walkDistanceCounter = 0;
-    
+    player.x = 120; player.y = 300; player.height = 48;
+    player.velocityX = 0; player.velocityY = 0;
+    player.grounded = false; player.isDucking = false;
+    cameraX = 0; goombaSpawnCooldown = 1.5; walkDistanceCounter = 0;
     generateProceduralLevel();
 }
 
 function triggerDyingSequence() {
-    gameState = 'DYING';
-    restartEnableTime = Date.now() + 4000; 
-    stopMusic();
-    stopAllSounds();
-    playSound(soundDeath);
+    gameState = 'DYING'; restartEnableTime = Date.now() + 4000;
+    stopMusic(); stopAllSounds(); playSound(soundDeath);
     player.velocityY = -6;
 }
-
 function triggerWinningSequence() {
-    gameState = 'WINNING';
-    restartEnableTime = Date.now() + 5000; 
-    stopMusic();
-    stopAllSounds();
-    playSound(soundComplete);
+    gameState = 'WINNING'; restartEnableTime = Date.now() + 5000;
+    stopMusic(); stopAllSounds(); playSound(soundComplete);
 }
 
+// --- UPDATE: Sub-Stepping verhindert Tunneling durch Bloecke ---
 function update(dt) {
-    // Falls das iPad laggt, deckeln wir dt, damit Mario nicht durch Wände teleportiert
-    if (dt > 0.1) dt = 0.1;
-    
-    // EXAKTER UNIVERSELLER TIMING MODIFIER (Gleicht Ruckler und FPS-Unterschiede perfekt aus!)
-    let modifier = dt * 60;
+    if (dt > 0.25) dt = 0;   // Tab war im Hintergrund
+    if (dt > 0.05) dt = 0.05;
+    const MAX_STEP = 1 / 60;
+    let rem = dt;
+    while (rem > 0) { const s = Math.min(rem, MAX_STEP); rem -= s; _step(s); }
+}
+
+function _step(dt) {
+    const mod = dt * 60;
 
     if (gameState === 'DYING') {
-        player.y += player.velocityY * modifier;
-        player.velocityY += 0.25 * modifier; 
-        if (Date.now() >= restartEnableTime) {
-            gameState = 'GAMEOVER'; 
-        }
-        return; 
-    }
-
-    if (gameState === 'WINNING') {
-        if (player.y < 352) {
-            player.y += 2.0 * modifier;
-        }
-        if (Date.now() >= restartEnableTime) {
-            gameState = 'WIN'; 
-        }
+        player.y += player.velocityY * mod;
+        player.velocityY += 0.25 * mod;
+        if (Date.now() >= restartEnableTime) gameState = 'GAMEOVER';
         return;
     }
-
+    if (gameState === 'WINNING') {
+        if (player.y < 352) player.y += 2.0 * mod;
+        if (Date.now() >= restartEnableTime) gameState = 'WIN';
+        return;
+    }
     if (gameState !== 'PLAYING') return;
 
-    animationTimer += modifier;
+    animationTimer += mod;
 
-    let wasDucking = player.isDucking;
+    // Ducken
+    const wasDucking = player.isDucking;
     player.isDucking = keys.down && player.grounded;
+    if (player.isDucking && !wasDucking)  { player.height = 28; player.y += 20; }
+    if (!player.isDucking && wasDucking)  { player.height = 48; player.y -= 20; }
 
-    if (player.isDucking && !wasDucking) {
-        player.height = 28;  
-        player.y += 20;      
-    } else if (!player.isDucking && wasDucking) {
-        player.height = 48;  
-        player.y -= 20;      
-    }
-
-    // Goomba Spawner Zeitbasiert korrigiert für langsame Bildschirme
+    // Goomba Spawner
     if (goombaSpawnCooldown > 0) {
         goombaSpawnCooldown -= dt;
-    } else {
-        if (player.x < flagPole.x - 500) {
-            if (Math.random() < 0.3) { // Leicht erhöhte Chance pro Sekunde
-                let spawnX = cameraX + canvas.width + 40;
-                let speedMultiplier = 1.3 + (Math.random() * 0.5) + (currentLevel * 0.1);
-                
-                enemies.push({ 
-                    x: spawnX, 
-                    y: 150, 
-                    width: 32, 
-                    height: 32, 
-                    speed: -speedMultiplier, 
-                    velocityY: 0, 
-                    alive: true 
-                });
-                goombaSpawnCooldown = 2.5 + Math.random() * 3.0; 
-            }
+    } else if (player.x < flagPole.x - 500) {
+        if (Math.random() < 0.3) {
+            enemies.push({ x: cameraX + canvas.width + 40, y: 150, width: 32, height: 32,
+                speed: -(1.3 + Math.random() * 0.5 + currentLevel * 0.1), velocityY: 0, alive: true });
+            goombaSpawnCooldown = 2.5 + Math.random() * 3.0;
         }
     }
 
-    let currentMaxSpeed = player.isDucking ? PLAYER_MAX_SPEED * 0.25 : PLAYER_MAX_SPEED;
-    let currentAcc = player.isDucking ? ACCELERATION * 0.2 : ACCELERATION;
+    // Bewegung
+    const maxSpd = player.isDucking ? PLAYER_MAX_SPEED * 0.25 : PLAYER_MAX_SPEED;
+    const acc    = player.isDucking ? ACCELERATION * 0.2      : ACCELERATION;
+    if (keys.right) { player.velocityX = Math.min(player.velocityX + acc * mod,  maxSpd); player.facing = 'right'; }
+    else if (keys.left) { player.velocityX = Math.max(player.velocityX - acc * mod, -maxSpd); player.facing = 'left'; }
+    else { player.velocityX -= player.velocityX * FRICTION * mod; if (Math.abs(player.velocityX) < 0.1) player.velocityX = 0; }
 
-    if (keys.right) {
-        player.velocityX += currentAcc * modifier;
-        if (player.velocityX > currentMaxSpeed) player.velocityX = currentMaxSpeed;
-        player.facing = 'right';
-    } else if (keys.left) {
-        player.velocityX -= currentAcc * modifier;
-        if (player.velocityX < -currentMaxSpeed) player.velocityX = -currentMaxSpeed;
-        player.facing = 'left';
-    } else {
-        player.velocityX -= player.velocityX * FRICTION * modifier;
-        if (Math.abs(player.velocityX) < 0.1) player.velocityX = 0;
-    }
+    if (player.grounded) walkDistanceCounter += Math.abs(player.velocityX) * mod;
 
-    if (player.grounded) {
-        walkDistanceCounter += Math.abs(player.velocityX) * modifier;
-    }
-
-    if (player.velocityY < 0 && !keys.jumpPressed) {
-        player.velocityY += (GRAVITY * 2.5) * modifier; 
-    } else {
-        player.velocityY += GRAVITY * modifier;
-    }
-
+    // Schwerkraft
+    player.velocityY += (player.velocityY < 0 && !keys.jumpPressed ? GRAVITY * 2.5 : GRAVITY) * mod;
     if (player.velocityY > MAX_FALL_SPEED) player.velocityY = MAX_FALL_SPEED;
-    
-    player.x += player.velocityX * modifier;
-    player.y += player.velocityY * modifier;
+
+    player.x += player.velocityX * mod;
+    player.y += player.velocityY * mod;
     player.grounded = false;
+    if (player.x < 0) { player.x = 0; player.velocityX = 0; }
 
-    if (player.x < 0) {
-        player.x = 0;
-        player.velocityX = 0;
-    }
+    // --- KOLLISION: zwei getrennte Paesse (fix fuer Corner-Bug / Rueckwaerts-Teleport) ---
+    const MARGIN = 100;
+    const near = platforms.filter(p =>
+        p.x + p.width  > player.x - MARGIN && p.x < player.x + player.width  + MARGIN &&
+        p.y + p.height > player.y - MARGIN && p.y < player.y + player.height + MARGIN
+    );
 
-    platforms.forEach(plat => {
-        if (player.x < plat.x + plat.width && player.x + player.width > plat.x &&
+    // Pass 1 – nur Y
+    near.forEach(plat => {
+        if (player.x < plat.x + plat.width  && player.x + player.width  > plat.x &&
             player.y < plat.y + plat.height && player.y + player.height > plat.y) {
-            
-            let overlapX = Math.min(player.x + player.width, plat.x + plat.width) - Math.max(player.x, plat.x);
-            let overlapY = Math.min(player.y + player.height, plat.y + plat.height) - Math.max(player.y, plat.y);
-
-            if (overlapX > overlapY) {
-                if (player.velocityY > 0 && player.y + player.height - (player.velocityY * modifier) <= plat.y + 12) {
-                    player.y -= overlapY;
-                    player.velocityY = 0;
-                    player.grounded = true;
+            const ox = Math.min(player.x + player.width,  plat.x + plat.width)  - Math.max(player.x, plat.x);
+            const oy = Math.min(player.y + player.height, plat.y + plat.height) - Math.max(player.y, plat.y);
+            if (oy <= ox) {
+                if (player.velocityY >= 0 && player.y + player.height - oy <= plat.y + 1) {
+                    player.y = plat.y - player.height; player.velocityY = 0; player.grounded = true;
                 } else if (player.velocityY < 0) {
-                    player.y += overlapY;
-                    player.velocityY = 0;
-                    if(plat.type === 'lucky') {
-                        plat.type = 'used';
-                        score += 5;
-                        playSound(soundCoin); 
-                    }
+                    player.y = plat.y + plat.height; player.velocityY = 0;
+                    if (plat.type === 'lucky') { plat.type = 'used'; score += 5; playSound(soundCoin); }
                 }
-            } else {
-                if (player.velocityX > 0 && player.x + player.width - (player.velocityX * modifier) <= plat.x + 6) player.x -= overlapX;
-                else if (player.velocityX < 0 && player.x - (player.velocityX * modifier) >= plat.x + plat.width - 6) player.x += overlapX;
             }
         }
     });
 
-    enemies.forEach(enemy => {
-        if (!enemy.alive) {
-            if (enemy.y < canvas.height + 50) enemy.y += 4 * modifier;
-            return;
+    // Pass 2 – nur X (nach Y-Korrektur)
+    near.forEach(plat => {
+        if (player.x < plat.x + plat.width  && player.x + player.width  > plat.x &&
+            player.y < plat.y + plat.height && player.y + player.height > plat.y) {
+            const ox = Math.min(player.x + player.width,  plat.x + plat.width)  - Math.max(player.x, plat.x);
+            const oy = Math.min(player.y + player.height, plat.y + plat.height) - Math.max(player.y, plat.y);
+            if (ox < oy) {
+                if (player.velocityX > 0) player.x = plat.x - player.width;
+                else if (player.velocityX < 0) player.x = plat.x + plat.width;
+                player.velocityX = 0;
+            }
         }
+    });
 
-        enemy.velocityY += GRAVITY * modifier;
+    // Enemies
+    enemies.forEach(enemy => {
+        if (!enemy.alive) { if (enemy.y < canvas.height + 50) enemy.y += 4 * mod; return; }
+        enemy.velocityY += GRAVITY * mod;
         if (enemy.velocityY > MAX_FALL_SPEED) enemy.velocityY = MAX_FALL_SPEED;
-        
-        enemy.x += enemy.speed * modifier;
-        enemy.y += enemy.velocityY * modifier;
+        enemy.x += enemy.speed * mod;
+        enemy.y += enemy.velocityY * mod;
 
-        platforms.forEach(plat => {
+        platforms.filter(p =>
+            p.x + p.width > enemy.x - 50 && p.x < enemy.x + enemy.width + 50 &&
+            p.y + p.height > enemy.y - 50 && p.y < enemy.y + enemy.height + 50
+        ).forEach(plat => {
             if (enemy.x < plat.x + plat.width && enemy.x + enemy.width > plat.x &&
                 enemy.y < plat.y + plat.height && enemy.y + enemy.height > plat.y) {
-                
-                let overlapX = Math.min(enemy.x + enemy.width, plat.x + plat.width) - Math.max(enemy.x, plat.x);
-                let overlapY = Math.min(enemy.y + enemy.height, plat.y + plat.height) - Math.max(enemy.y, plat.y);
-
-                if (overlapX > overlapY) {
-                    if (enemy.velocityY > 0 && enemy.y + enemy.height - (enemy.velocityY * modifier) <= plat.y + 8) {
-                        enemy.y -= overlapY;
-                        enemy.velocityY = 0;
+                const ox = Math.min(enemy.x + enemy.width,  plat.x + plat.width)  - Math.max(enemy.x, plat.x);
+                const oy = Math.min(enemy.y + enemy.height, plat.y + plat.height) - Math.max(enemy.y, plat.y);
+                if (oy < ox) {
+                    if (enemy.velocityY >= 0 && enemy.y + enemy.height - oy <= plat.y + 1) {
+                        enemy.y = plat.y - enemy.height; enemy.velocityY = 0;
                     }
                 } else {
-                    if (plat.type === 'pipe' || plat.type === 'block' || plat.type === 'used') {
-                        if (enemy.speed > 0 && enemy.x + enemy.width - (enemy.speed * modifier) <= plat.x + 6) enemy.speed *= -1;
-                        else if (enemy.speed < 0 && enemy.x - (enemy.speed * modifier) >= plat.x + plat.width - 6) enemy.speed *= -1;
-                    }
+                    enemy.speed *= -1; enemy.x += enemy.speed * mod * 2;
                 }
             }
         });
 
         if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
             player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) {
-            
-            // Bombensichere Abfrage: Im Sinkflug wird IMMER gekillt, Toleranzbereich an variable Frameraten angepasst
-            if (player.velocityY > 0 && (player.y + player.height) <= enemy.y + 24) {
-                enemy.alive = false;
-                player.velocityY = -JUMP_FORCE * 0.65; 
-                score += 10;
-                playSound(soundStomp); 
-            } else {
-                triggerDyingSequence();
-            }
+            if (player.velocityY > 0 && player.y + player.height <= enemy.y + 20) {
+                enemy.alive = false; player.velocityY = -JUMP_FORCE * 0.65; score += 10; playSound(soundStomp);
+            } else { triggerDyingSequence(); }
         }
-        
         if (enemy.y > canvas.height) enemy.alive = false;
     });
 
+    // Array-Bloat verhindern
+    if (enemies.length > 20) enemies = enemies.filter(e => e.alive || e.y < canvas.height + 100);
+    if (coins.length  > 50) coins   = coins.filter(c => !c.collected);
+
+    // Coins
     coins.forEach(coin => {
-        if (!coin.collected && player.x < coin.x + 20 && player.x + player.width > coin.x &&
-            player.y < coin.y + coinHeightCheck() && player.y + player.height > coin.y) {
-            coin.collected = true;
-            score += 1;
-            playSound(soundCoin); 
+        if (!coin.collected &&
+            player.x < coin.x + 20 && player.x + player.width > coin.x &&
+            player.y < coin.y + (player.isDucking ? 28 : 20) && player.y + player.height > coin.y) {
+            coin.collected = true; score += 1; playSound(soundCoin);
         }
     });
 
-    function coinHeightCheck() { return player.isDucking ? 28 : 20; }
-
+    // Flagge
     if (player.x < flagPole.x + flagPole.width && player.x + player.width > flagPole.x &&
         player.y < flagPole.y + flagPole.height && player.y + player.height > flagPole.y) {
-        currentLevel++;
-        triggerWinningSequence();
+        currentLevel++; triggerWinningSequence();
     }
-
     if (player.y > canvas.height) triggerDyingSequence();
 
-    let targetCameraX = player.x - canvas.width / 2.6;
-    if (targetCameraX < 0) targetCameraX = 0;
-    cameraX += (targetCameraX - cameraX) * 0.05 * modifier; 
+    // Kamera
+    let targetCamX = player.x - canvas.width / 2.6;
+    if (targetCamX < 0) targetCamX = 0;
+    cameraX += (targetCamX - cameraX) * 0.05 * mod;
 }
 
-function drawRetroBlock(x, y, w, h, baseColor, darkColor, lightColor) {
-    ctx.fillStyle = baseColor;
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = lightColor;
-    ctx.fillRect(x, y, w, 2); ctx.fillRect(x, y, 2, h);
-    ctx.fillStyle = darkColor;
-    ctx.fillRect(x, y + h - 2, w, 2); ctx.fillRect(x + w - 2, y, 2, h);
-
+// --- RENDER ---
+function drawRetroBlock(x, y, w, h, base, dark, light) {
+    ctx.fillStyle = base;  ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = light; ctx.fillRect(x, y, w, 2); ctx.fillRect(x, y, 2, h);
+    ctx.fillStyle = dark;  ctx.fillRect(x, y + h - 2, w, 2); ctx.fillRect(x + w - 2, y, 2, h);
     ctx.fillStyle = '#000';
     ctx.fillRect(x+3, y+3, 2, 2); ctx.fillRect(x+w-5, y+3, 2, 2);
     ctx.fillRect(x+3, y+h-5, 2, 2); ctx.fillRect(x+w-5, y+h-5, 2, 2);
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Himmel-Gradient (manuell, damit clearRect nicht schwarz hinterlaesst)
+    const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    sky.addColorStop(0,    '#5c94fc');
+    sky.addColorStop(0.70, '#98f8f8');
+    sky.addColorStop(1.0,  '#b8f818');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
     ctx.translate(-cameraX, 0);
 
+    // Berge
     ctx.fillStyle = '#3f69c7';
-    for(let i=0; i<6; i++) {
-        let bx = i * 550 - (cameraX * 0.1);
-        ctx.beginPath(); ctx.moveTo(bx, 400); ctx.lineTo(bx + 160, 200); ctx.lineTo(bx + 320, 400); ctx.fill();
+    for (let i = 0; i < 6; i++) {
+        const bx = i * 550 - cameraX * 0.1;
+        if (bx + 320 < cameraX - 50 || bx > cameraX + canvas.width + 50) continue;
+        ctx.beginPath(); ctx.moveTo(bx, 400); ctx.lineTo(bx+160, 200); ctx.lineTo(bx+320, 400); ctx.fill();
     }
     ctx.fillStyle = '#4c78db';
-    for(let i=0; i<7; i++) {
-        let bx = i * 400 - 50 - (cameraX * 0.18);
-        ctx.beginPath(); ctx.moveTo(bx, 400); ctx.lineTo(bx + 120, 240); ctx.lineTo(bx + 240, 400); ctx.fill();
+    for (let i = 0; i < 7; i++) {
+        const bx = i * 400 - 50 - cameraX * 0.18;
+        if (bx + 240 < cameraX - 50 || bx > cameraX + canvas.width + 50) continue;
+        ctx.beginPath(); ctx.moveTo(bx, 400); ctx.lineTo(bx+120, 240); ctx.lineTo(bx+240, 400); ctx.fill();
     }
-
-    for(let i=0; i<6; i++) {
-        let cx = 100 + i*600 - (cameraX * 0.03);
+    // Wolken
+    for (let i = 0; i < 6; i++) {
+        const cx = 100 + i * 600 - cameraX * 0.03;
+        if (cx + 100 < cameraX - 50 || cx > cameraX + canvas.width + 50) continue;
         ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.beginPath(); ctx.arc(cx+4, 74, 24, 0, Math.PI*2); ctx.arc(cx+34, 64, 34, 0, Math.PI*2); ctx.arc(cx+64, 74, 24, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.arc(cx, 70, 24, 0, Math.PI*2); ctx.arc(cx+30, 60, 34, 0, Math.PI*2); ctx.arc(cx+60, 70, 24, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+4,74,24,0,Math.PI*2); ctx.arc(cx+34,64,34,0,Math.PI*2); ctx.arc(cx+64,74,24,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(cx,70,24,0,Math.PI*2); ctx.arc(cx+30,60,34,0,Math.PI*2); ctx.arc(cx+60,70,24,0,Math.PI*2); ctx.fill();
     }
 
+    const vL = cameraX - 50, vR = cameraX + canvas.width + 50;
+
+    // Plattformen
     platforms.forEach(plat => {
+        if (plat.x + plat.width < vL || plat.x > vR) return;
         if (plat.type === 'ground') {
             ctx.fillStyle = '#b84418'; ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
-            for(let i = 0; i < plat.width; i += 16) {
+            const ts = Math.max(0, Math.floor((cameraX - plat.x) / 16) * 16);
+            const te = Math.min(plat.width, Math.ceil((cameraX + canvas.width - plat.x) / 16) * 16 + 16);
+            for (let i = ts; i < te; i += 16) {
                 ctx.fillStyle = '#983408';
-                ctx.fillRect(plat.x + i, plat.y + 12, 1, plat.height - 12);
-                ctx.fillRect(plat.x + i, plat.y + 28, 16, 1);
+                ctx.fillRect(plat.x+i, plat.y+12, 1, plat.height-12);
+                ctx.fillRect(plat.x+i, plat.y+28, 16, 1);
             }
             ctx.fillStyle = '#00a800'; ctx.fillRect(plat.x, plat.y, plat.width, 12);
-            ctx.fillStyle = '#b8f818'; ctx.fillRect(plat.x, plat.y, plat.width, 4); 
-        } 
-        else if (plat.type === 'block') {
-            drawRetroBlock(plat.x, plat.y, plat.width, plat.height, '#cc6633', '#662200', '#ff9966');
-        } 
-        else if (plat.type === 'lucky') {
-            let blink = Math.floor(animationTimer / 25) % 2 === 0;
-            drawRetroBlock(plat.x, plat.y, plat.width, plat.height, blink ? '#fcc018' : '#cc9000', '#553300', '#ffea75');
-            ctx.fillStyle = '#000'; ctx.font = 'bold 22px monospace'; ctx.fillText('?', plat.x + 11, plat.y + 25);
-            ctx.fillStyle = '#fff'; ctx.fillText('?', plat.x + 10, plat.y + 24);
-        }
-        else if (plat.type === 'used') {
-            drawRetroBlock(plat.x, plat.y, plat.width, plat.height, '#7c7c7c', '#333333', '#aaaaaa');
-            ctx.fillStyle = '#333'; ctx.fillRect(plat.x+8, plat.y+8, plat.width-16, plat.height-16);
-        }
-        else if (plat.type === 'pipe') {
-            ctx.fillStyle = '#00a800'; ctx.fillRect(plat.x, plat.y + 24, plat.width, plat.height - 24);
-            ctx.fillStyle = '#44d844'; ctx.fillRect(plat.x + 8, plat.y + 24, 12, plat.height - 24);
-            ctx.fillStyle = '#007000'; ctx.fillRect(plat.x + plat.width - 12, plat.y + 24, 8, plat.height - 24);
-            ctx.fillStyle = '#00a800'; ctx.fillRect(plat.x - 4, plat.y, plat.width + 8, 24);
-            ctx.fillStyle = '#44d844'; ctx.fillRect(plat.x, plat.y, 12, 24);
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-            ctx.strokeRect(plat.x - 4, plat.y, plat.width + 8, 24);
-            ctx.strokeRect(plat.x, plat.y + 24, plat.width, plat.height - 24);
+            ctx.fillStyle = '#b8f818'; ctx.fillRect(plat.x, plat.y, plat.width, 4);
+        } else if (plat.type === 'block') {
+            drawRetroBlock(plat.x, plat.y, plat.width, plat.height, '#cc6633','#662200','#ff9966');
+        } else if (plat.type === 'lucky') {
+            const blink = Math.floor(animationTimer / 25) % 2 === 0;
+            drawRetroBlock(plat.x, plat.y, plat.width, plat.height, blink?'#fcc018':'#cc9000','#553300','#ffea75');
+            ctx.fillStyle='#000'; ctx.font='bold 22px monospace'; ctx.fillText('?',plat.x+11,plat.y+25);
+            ctx.fillStyle='#fff'; ctx.fillText('?',plat.x+10,plat.y+24);
+        } else if (plat.type === 'used') {
+            drawRetroBlock(plat.x, plat.y, plat.width, plat.height, '#7c7c7c','#333333','#aaaaaa');
+            ctx.fillStyle='#333'; ctx.fillRect(plat.x+8,plat.y+8,plat.width-16,plat.height-16);
+        } else if (plat.type === 'pipe') {
+            ctx.fillStyle='#00a800'; ctx.fillRect(plat.x,plat.y+24,plat.width,plat.height-24);
+            ctx.fillStyle='#44d844'; ctx.fillRect(plat.x+8,plat.y+24,12,plat.height-24);
+            ctx.fillStyle='#007000'; ctx.fillRect(plat.x+plat.width-12,plat.y+24,8,plat.height-24);
+            ctx.fillStyle='#00a800'; ctx.fillRect(plat.x-4,plat.y,plat.width+8,24);
+            ctx.fillStyle='#44d844'; ctx.fillRect(plat.x,plat.y,12,24);
+            ctx.strokeStyle='#000'; ctx.lineWidth=2;
+            ctx.strokeRect(plat.x-4,plat.y,plat.width+8,24);
+            ctx.strokeRect(plat.x,plat.y+24,plat.width,plat.height-24);
         }
     });
 
+    // Coins
     coins.forEach(coin => {
-        if (!coin.collected) {
-            let coinWidth = 16 * Math.abs(Math.sin(animationTimer * 0.04)); 
-            ctx.fillStyle = '#fcc018'; ctx.beginPath();
-            ctx.ellipse(coin.x + 10, coin.y + 10, coinWidth/2 + 2, 11, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#ffffff'; ctx.beginPath();
-            ctx.ellipse(coin.x + 10, coin.y + 10, coinWidth/4, 6, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
-        }
+        if (coin.collected || coin.x+20 < vL || coin.x > vR) return;
+        const cw = 16 * Math.abs(Math.sin(animationTimer * 0.04));
+        ctx.fillStyle='#fcc018'; ctx.beginPath(); ctx.ellipse(coin.x+10,coin.y+10,cw/2+2,11,0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='#fff';    ctx.beginPath(); ctx.ellipse(coin.x+10,coin.y+10,cw/4,6,0,0,Math.PI*2);    ctx.fill();
+        ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.stroke();
     });
 
+    // Enemies
     enemies.forEach(enemy => {
-        let wobble = Math.sin(animationTimer * 0.06) * 2; 
-        ctx.fillStyle = '#803000'; ctx.beginPath(); ctx.arc(enemy.x + 16, enemy.y + 14, 16, Math.PI, 0); ctx.fill();
-        ctx.fillRect(enemy.x + 4, enemy.y + 14, 24, 12);
-        ctx.fillStyle = '#b85c18'; ctx.beginPath(); ctx.arc(enemy.x + 16, enemy.y + 12, 14, Math.PI, 0); ctx.fill();
-        ctx.fillRect(enemy.x + 6, enemy.y + 12, 20, 10);
-        ctx.fillStyle = '#ffcc99'; ctx.fillRect(enemy.x + 8, enemy.y + 18, 16, 8);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(enemy.x + 2 + wobble, enemy.y + 26, 10, 6); ctx.fillRect(enemy.x + 20 - wobble, enemy.y + 26, 10, 6);
-        ctx.fillStyle = '#fff'; ctx.fillRect(enemy.x + 8, enemy.y + 11, 5, 7); ctx.fillRect(enemy.x + 19, enemy.y + 11, 5, 7);
-        ctx.fillStyle = '#000'; ctx.fillRect(enemy.x + 9, enemy.y + 13, 3, 5); ctx.fillRect(enemy.x + 20, enemy.y + 13, 3, 5);
-        ctx.fillRect(enemy.x + 6, enemy.y + 8, 7, 2); ctx.fillRect(enemy.x + 19, enemy.y + 8, 7, 2);
+        if (enemy.x+enemy.width < vL || enemy.x > vR) return;
+        const w = Math.sin(animationTimer * 0.06) * 2;
+        ctx.fillStyle='#803000'; ctx.beginPath(); ctx.arc(enemy.x+16,enemy.y+14,16,Math.PI,0); ctx.fill(); ctx.fillRect(enemy.x+4,enemy.y+14,24,12);
+        ctx.fillStyle='#b85c18'; ctx.beginPath(); ctx.arc(enemy.x+16,enemy.y+12,14,Math.PI,0); ctx.fill(); ctx.fillRect(enemy.x+6,enemy.y+12,20,10);
+        ctx.fillStyle='#ffcc99'; ctx.fillRect(enemy.x+8,enemy.y+18,16,8);
+        ctx.fillStyle='#000';
+        ctx.fillRect(enemy.x+2+w,enemy.y+26,10,6); ctx.fillRect(enemy.x+20-w,enemy.y+26,10,6);
+        ctx.fillStyle='#fff'; ctx.fillRect(enemy.x+8,enemy.y+11,5,7); ctx.fillRect(enemy.x+19,enemy.y+11,5,7);
+        ctx.fillStyle='#000'; ctx.fillRect(enemy.x+9,enemy.y+13,3,5); ctx.fillRect(enemy.x+20,enemy.y+13,3,5);
+        ctx.fillRect(enemy.x+6,enemy.y+8,7,2); ctx.fillRect(enemy.x+19,enemy.y+8,7,2);
     });
 
-    ctx.fillStyle = '#dedede'; ctx.fillRect(flagPole.x, flagPole.y, flagPole.width, flagPole.height);
-    ctx.fillStyle = '#fcb418'; ctx.beginPath(); ctx.arc(flagPole.x + 5, flagPole.y, 10, 0, Math.PI*2); ctx.fill();
-    let flagWave = Math.sin(animationTimer * 0.05) * 4;
-    ctx.fillStyle = '#ff2222'; ctx.beginPath();
-    ctx.moveTo(flagPole.x, flagPole.y + 20); ctx.lineTo(flagPole.x - 45, flagPole.y + 40 + flagWave); ctx.lineTo(flagPole.x, flagPole.y + 60); ctx.fill();
+    // Flagge
+    ctx.fillStyle='#dedede'; ctx.fillRect(flagPole.x,flagPole.y,flagPole.width,flagPole.height);
+    ctx.fillStyle='#fcb418'; ctx.beginPath(); ctx.arc(flagPole.x+5,flagPole.y,10,0,Math.PI*2); ctx.fill();
+    const fw = Math.sin(animationTimer * 0.05) * 4;
+    ctx.fillStyle='#ff2222'; ctx.beginPath();
+    ctx.moveTo(flagPole.x,flagPole.y+20); ctx.lineTo(flagPole.x-45,flagPole.y+40+fw); ctx.lineTo(flagPole.x,flagPole.y+60); ctx.fill();
 
-    let isMoving = Math.abs(player.velocityX) > 0.15 && player.grounded;
-    let walkStep = Math.sin(walkDistanceCounter * 0.035); 
-
+    // Spieler
+    const isMoving = Math.abs(player.velocityX) > 0.15 && player.grounded;
+    const ws = Math.sin(walkDistanceCounter * 0.035);
     if (player.isDucking) {
-        ctx.fillStyle = '#0044cc'; 
-        ctx.fillRect(player.x + 2, player.y + 10, player.width - 4, player.height - 14);
-        ctx.fillStyle = '#ffcc00'; 
-        ctx.fillRect(player.x + 8, player.y + 13, 3, 3); ctx.fillRect(player.x + 20, player.y + 13, 3, 3);
-        ctx.fillStyle = '#ffcc99'; 
-        ctx.fillRect(player.x + 6, player.y + 2, player.width - 12, 10);
-        ctx.fillStyle = '#ff2222'; 
-        ctx.fillRect(player.x + 4, player.y - 2, player.width - 8, 5);
-        ctx.fillRect(player.x + (player.facing === 'right' ? 10 : -2), player.y + 1, player.width - 8, 2);
-        ctx.fillStyle = '#4a2306'; 
-        ctx.fillRect(player.x + 1, player.y + player.height - 5, 12, 5); ctx.fillRect(player.x + player.width - 13, player.y + player.height - 5, 12, 5);
-        ctx.fillStyle = '#000'; 
-        if (player.facing === 'right') {
-            ctx.fillRect(player.x + player.width - 12, player.y + 4, 3, 3); 
-        } else {
-            ctx.fillRect(player.x + 9, player.y + 4, 3, 3); 
-        }
+        ctx.fillStyle='#0044cc'; ctx.fillRect(player.x+2,player.y+10,player.width-4,player.height-14);
+        ctx.fillStyle='#ffcc00'; ctx.fillRect(player.x+8,player.y+13,3,3); ctx.fillRect(player.x+20,player.y+13,3,3);
+        ctx.fillStyle='#ffcc99'; ctx.fillRect(player.x+6,player.y+2,player.width-12,10);
+        ctx.fillStyle='#ff2222'; ctx.fillRect(player.x+4,player.y-2,player.width-8,5);
+        ctx.fillRect(player.x+(player.facing==='right'?10:-2),player.y+1,player.width-8,2);
+        ctx.fillStyle='#4a2306'; ctx.fillRect(player.x+1,player.y+player.height-5,12,5); ctx.fillRect(player.x+player.width-13,player.y+player.height-5,12,5);
+        ctx.fillStyle='#000';
+        if (player.facing==='right') ctx.fillRect(player.x+player.width-12,player.y+4,3,3);
+        else ctx.fillRect(player.x+9,player.y+4,3,3);
     } else {
-        ctx.fillStyle = '#0044cc'; ctx.fillRect(player.x + 4, player.y + 14, player.width - 8, player.height - 20);
-        ctx.fillStyle = '#ff2222'; ctx.fillRect(player.x, player.y + 14, 6, 16); ctx.fillRect(player.x + player.width - 6, player.y + 14, 6, 16);
-        ctx.fillStyle = '#ffcc00'; ctx.fillRect(player.x + 8, player.y + 18, 3, 3); ctx.fillRect(player.x + 20, player.y + 18, 3, 3);
-        ctx.fillStyle = '#fff'; ctx.fillRect(player.x - 2, player.y + 24, 4, 5); ctx.fillRect(player.x + player.width - 2, player.y + 24, 4, 5);
-        ctx.fillStyle = '#ffcc99'; ctx.fillRect(player.x + 4, player.y + 4, player.width - 8, 12);
-        ctx.fillStyle = '#ff2222'; ctx.fillRect(player.x + 2, player.y, player.width - 4, 6);
-        ctx.fillRect(player.x + (player.facing==='right'?6:-2), player.y + 4, player.width - 4, 2);
-        
-        ctx.fillStyle = '#4a2306'; 
+        ctx.fillStyle='#0044cc'; ctx.fillRect(player.x+4,player.y+14,player.width-8,player.height-20);
+        ctx.fillStyle='#ff2222'; ctx.fillRect(player.x,player.y+14,6,16); ctx.fillRect(player.x+player.width-6,player.y+14,6,16);
+        ctx.fillStyle='#ffcc00'; ctx.fillRect(player.x+8,player.y+18,3,3); ctx.fillRect(player.x+20,player.y+18,3,3);
+        ctx.fillStyle='#fff';    ctx.fillRect(player.x-2,player.y+24,4,5); ctx.fillRect(player.x+player.width-2,player.y+24,4,5);
+        ctx.fillStyle='#ffcc99'; ctx.fillRect(player.x+4,player.y+4,player.width-8,12);
+        ctx.fillStyle='#ff2222'; ctx.fillRect(player.x+2,player.y,player.width-4,6);
+        ctx.fillRect(player.x+(player.facing==='right'?6:-2),player.y+4,player.width-4,2);
+        ctx.fillStyle='#4a2306';
         if (isMoving) {
-            let offset = walkStep * 4; 
-            ctx.fillRect(player.x + 2 + offset, player.y + player.height - 6, 11, 6); 
-            ctx.fillRect(player.x + player.width - 13 - offset, player.y + player.height - 6, 11, 6);
+            const o = ws * 4;
+            ctx.fillRect(player.x+2+o,player.y+player.height-6,11,6);
+            ctx.fillRect(player.x+player.width-13-o,player.y+player.height-6,11,6);
         } else if (!player.grounded) {
-            ctx.fillRect(player.x, player.y + player.height - 8, 11, 6); 
-            ctx.fillRect(player.x + player.width - 11, player.y + player.height - 6, 11, 6);
+            ctx.fillRect(player.x,player.y+player.height-8,11,6);
+            ctx.fillRect(player.x+player.width-11,player.y+player.height-6,11,6);
         } else {
-            ctx.fillRect(player.x + 2, player.y + player.height - 6, 11, 6); 
-            ctx.fillRect(player.x + player.width - 13, player.y + player.height - 6, 11, 6);
+            ctx.fillRect(player.x+2,player.y+player.height-6,11,6);
+            ctx.fillRect(player.x+player.width-13,player.y+player.height-6,11,6);
         }
-
-        ctx.fillStyle = '#000';
-        if (player.facing === 'right') {
-            ctx.fillRect(player.x + player.width - 10, player.y + 6, 4, 4); 
-            ctx.fillStyle = '#4a2306'; ctx.fillRect(player.x + player.width - 8, player.y + 10, 8, 4); 
-        } else {
-            ctx.fillRect(player.x + 6, player.y + 6, 4, 4); 
-            ctx.fillStyle = '#4a2306'; ctx.fillRect(player.x, player.y + 10, 8, 4); 
-        }
+        ctx.fillStyle='#000';
+        if (player.facing==='right') { ctx.fillRect(player.x+player.width-10,player.y+6,4,4); ctx.fillStyle='#4a2306'; ctx.fillRect(player.x+player.width-8,player.y+10,8,4); }
+        else                          { ctx.fillRect(player.x+6,player.y+6,4,4);               ctx.fillStyle='#4a2306'; ctx.fillRect(player.x,player.y+10,8,4); }
     }
 
     ctx.restore();
 
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 22px "Courier New"';
-    ctx.fillText(`MARIO   SCORE`, 30, 35);
-    ctx.fillText(` 0000    ${score.toString().padStart(4, '0')}`, 30, 60);
+    // HUD
+    ctx.fillStyle='#fff'; ctx.font='bold 22px "Courier New"';
+    ctx.fillText('MARIO   SCORE', 30, 35);
+    ctx.fillText(` 0000    ${score.toString().padStart(4,'0')}`, 30, 60);
     ctx.fillText(`WORLD 5-${currentLevel}`, canvas.width - 160, 35);
 
-    if (gameState === 'MENU') drawPerfectMenu();
-    if (gameState === 'GAMEOVER') drawEndScreen('GAME OVER', '#ff3333', 'Drücke "R" für Neustart');
-    if (gameState === 'WIN') drawEndScreen('STAGE CLEAR!', '#33cc33', 'Drücke "R" für das nächste Level!');
+    if (gameState === 'MENU')     drawMenu();
+    if (gameState === 'GAMEOVER') drawEndScreen('GAME OVER',    '#ff3333', 'Drücke "R" für Neustart');
+    if (gameState === 'WIN')      drawEndScreen('STAGE CLEAR!', '#33cc33', 'Drücke "R" für das nächste Level!');
 }
 
-function drawPerfectMenu() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 46px "Courier New"';
-    ctx.fillText('SUPER MARIO BROS.', canvas.width / 2, 160);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 22px "Courier New"';
-    ctx.fillText('PROCEDURAL INFINITE', canvas.width / 2, 210);
-
-    if (Math.floor(Date.now() / 400) % 2 === 0) {
-        ctx.fillStyle = '#fff'; ctx.font = '20px "Courier New"';
-        ctx.fillText('DRÜCKE ENTER ZUM STARTEN', canvas.width / 2, 330);
-    }
-    ctx.textAlign = 'left';
+function drawMenu() {
+    ctx.fillStyle='rgba(0,0,0,0.75)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.textAlign='center';
+    ctx.fillStyle='#ffcc00'; ctx.font='bold 46px "Courier New"'; ctx.fillText('SUPER MARIO BROS.', canvas.width/2, 160);
+    ctx.fillStyle='#fff';    ctx.font='bold 22px "Courier New"'; ctx.fillText('PROCEDURAL INFINITE', canvas.width/2, 210);
+    if (Math.floor(Date.now()/400)%2===0) { ctx.font='20px "Courier New"'; ctx.fillText('DRÜCKE ENTER ZUM STARTEN', canvas.width/2, 330); }
+    ctx.textAlign='left';
+}
+function drawEndScreen(title, color, sub) {
+    ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle=color; ctx.font='bold 42px "Courier New"'; ctx.textAlign='center';
+    ctx.fillText(title, canvas.width/2, canvas.height/2-10);
+    ctx.fillStyle='#fff'; ctx.font='20px "Courier New"';
+    ctx.fillText(sub, canvas.width/2, canvas.height/2+40);
+    ctx.textAlign='left';
 }
 
-function drawEndScreen(title, color, subtitle) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = color; ctx.font = 'bold 42px "Courier New"'; ctx.textAlign = 'center';
-    ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 10);
-    ctx.fillStyle = '#fff'; ctx.font = '20px "Courier New"';
-    ctx.fillText(subtitle, canvas.width / 2, canvas.height / 2 + 40);
-    ctx.textAlign = 'left';
-}
-
-function gameLoop(currentTime) {
-    let dt = (currentTime - lastTime) / 1000;
-    lastTime = currentTime;
-
+function gameLoop(now) {
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
     update(dt);
     draw();
     requestAnimationFrame(gameLoop);
@@ -796,10 +654,7 @@ function gameLoop(currentTime) {
 
 generateProceduralLevel();
 setupTouchControls();
-requestAnimationFrame((timestamp) => {
-    lastTime = timestamp;
-    gameLoop(timestamp);
-});
+requestAnimationFrame(t => { lastTime = t; gameLoop(t); });
 </script>
 </body>
 </html>
