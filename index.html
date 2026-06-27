@@ -42,6 +42,7 @@
             background: linear-gradient(to bottom, #5c94fc 0%, #98f8f8 70%, #b8f818 100%);
             display: block;
             image-rendering: pixelated;
+            touch-action: none;
         }
         .controls-hint {
             margin-top: 15px;
@@ -162,12 +163,12 @@ function stopAllSounds() {
 function stopMusic() { musicMain.pause(); musicMain.currentTime = 0; }
 
 // --- PHYSIK ---
-const GRAVITY        = 0.4;
-const JUMP_FORCE     = 12.5;
-const MAX_FALL_SPEED = 12.0;
-const ACCELERATION   = 1.0;
-const FRICTION       = 0.15;
-const PLAYER_MAX_SPEED = 5.2;
+const GRAVITY        = 0.39;
+const JUMP_FORCE     = 12.7;
+const MAX_FALL_SPEED = 11.8;
+const ACCELERATION   = 1.03;
+const FRICTION       = 0.17;
+const PLAYER_MAX_SPEED = 5.35;
 
 // --- STATE ---
 let gameState       = 'MENU';
@@ -302,13 +303,17 @@ function triggerWinningSequence() {
     stopMusic(); stopAllSounds(); playSound(soundComplete);
 }
 
-// --- UPDATE: Sub-Stepping verhindert Tunneling durch Bloecke ---
+// --- OPTIMIERTE UPDATE FÜR BESSERE FPS ---
 function update(dt) {
-    if (dt > 0.25) dt = 0;   // Tab war im Hintergrund
+    if (dt > 0.25) dt = 0;
     if (dt > 0.05) dt = 0.05;
-    const MAX_STEP = 1 / 60;
+    const MAX_STEP = 1 / 65;
     let rem = dt;
-    while (rem > 0) { const s = Math.min(rem, MAX_STEP); rem -= s; _step(s); }
+    while (rem > 0) { 
+        const s = Math.min(rem, MAX_STEP); 
+        rem -= s; 
+        _step(s); 
+    }
 }
 
 function _step(dt) {
@@ -335,28 +340,28 @@ function _step(dt) {
     if (player.isDucking && !wasDucking)  { player.height = 28; player.y += 20; }
     if (!player.isDucking && wasDucking)  { player.height = 48; player.y -= 20; }
 
-    // Goomba Spawner
+    // Goomba Spawner (optimiert)
     if (goombaSpawnCooldown > 0) {
         goombaSpawnCooldown -= dt;
-    } else if (player.x < flagPole.x - 500) {
-        if (Math.random() < 0.3) {
-            enemies.push({ x: cameraX + canvas.width + 40, y: 150, width: 32, height: 32,
-                speed: -(1.3 + Math.random() * 0.5 + currentLevel * 0.1), velocityY: 0, alive: true });
-            goombaSpawnCooldown = 2.5 + Math.random() * 3.0;
+    } else if (player.x < flagPole.x - 550) {
+        if (Math.random() < 0.29) {
+            enemies.push({ x: cameraX + canvas.width + 45, y: 150, width: 32, height: 32,
+                speed: -(1.32 + Math.random() * 0.48 + currentLevel * 0.1), velocityY: 0, alive: true });
+            goombaSpawnCooldown = 2.6 + Math.random() * 2.9;
         }
     }
 
     // Bewegung
-    const maxSpd = player.isDucking ? PLAYER_MAX_SPEED * 0.25 : PLAYER_MAX_SPEED;
-    const acc    = player.isDucking ? ACCELERATION * 0.2      : ACCELERATION;
+    const maxSpd = player.isDucking ? PLAYER_MAX_SPEED * 0.26 : PLAYER_MAX_SPEED;
+    const acc    = player.isDucking ? ACCELERATION * 0.21 : ACCELERATION;
     if (keys.right) { player.velocityX = Math.min(player.velocityX + acc * mod,  maxSpd); player.facing = 'right'; }
     else if (keys.left) { player.velocityX = Math.max(player.velocityX - acc * mod, -maxSpd); player.facing = 'left'; }
-    else { player.velocityX -= player.velocityX * FRICTION * mod; if (Math.abs(player.velocityX) < 0.1) player.velocityX = 0; }
+    else { player.velocityX -= player.velocityX * FRICTION * mod; if (Math.abs(player.velocityX) < 0.09) player.velocityX = 0; }
 
     if (player.grounded) walkDistanceCounter += Math.abs(player.velocityX) * mod;
 
     // Schwerkraft
-    player.velocityY += (player.velocityY < 0 && !keys.jumpPressed ? GRAVITY * 2.5 : GRAVITY) * mod;
+    player.velocityY += (player.velocityY < 0 && !keys.jumpPressed ? GRAVITY * 2.55 : GRAVITY) * mod;
     if (player.velocityY > MAX_FALL_SPEED) player.velocityY = MAX_FALL_SPEED;
 
     player.x += player.velocityX * mod;
@@ -364,35 +369,44 @@ function _step(dt) {
     player.grounded = false;
     if (player.x < 0) { player.x = 0; player.velocityX = 0; }
 
-    // --- KOLLISION: zwei getrennte Paesse (fix fuer Corner-Bug / Rueckwaerts-Teleport) ---
-    const MARGIN = 100;
+    // Optimierte Kollision
+    const MARGIN = 110;
     const near = platforms.filter(p =>
-        p.x + p.width  > player.x - MARGIN && p.x < player.x + player.width  + MARGIN &&
+        p.x + p.width > player.x - MARGIN && p.x < player.x + player.width + MARGIN &&
         p.y + p.height > player.y - MARGIN && p.y < player.y + player.height + MARGIN
     );
 
-    // Pass 1 – nur Y
-    near.forEach(plat => {
-        if (player.x < plat.x + plat.width  && player.x + player.width  > plat.x &&
+    // Pass 1 – Y
+    for (let i = 0; i < near.length; i++) {
+        const plat = near[i];
+        if (player.x < plat.x + plat.width && player.x + player.width > plat.x &&
             player.y < plat.y + plat.height && player.y + player.height > plat.y) {
-            const ox = Math.min(player.x + player.width,  plat.x + plat.width)  - Math.max(player.x, plat.x);
+            const ox = Math.min(player.x + player.width, plat.x + plat.width) - Math.max(player.x, plat.x);
             const oy = Math.min(player.y + player.height, plat.y + plat.height) - Math.max(player.y, plat.y);
             if (oy <= ox) {
                 if (player.velocityY >= 0 && player.y + player.height - oy <= plat.y + 1) {
-                    player.y = plat.y - player.height; player.velocityY = 0; player.grounded = true;
+                    player.y = plat.y - player.height; 
+                    player.velocityY = 0; 
+                    player.grounded = true;
                 } else if (player.velocityY < 0) {
-                    player.y = plat.y + plat.height; player.velocityY = 0;
-                    if (plat.type === 'lucky') { plat.type = 'used'; score += 5; playSound(soundCoin); }
+                    player.y = plat.y + plat.height; 
+                    player.velocityY = 0;
+                    if (plat.type === 'lucky') { 
+                        plat.type = 'used'; 
+                        score += 5; 
+                        playSound(soundCoin); 
+                    }
                 }
             }
         }
-    });
+    }
 
-    // Pass 2 – nur X (nach Y-Korrektur)
-    near.forEach(plat => {
-        if (player.x < plat.x + plat.width  && player.x + player.width  > plat.x &&
+    // Pass 2 – X
+    for (let i = 0; i < near.length; i++) {
+        const plat = near[i];
+        if (player.x < plat.x + plat.width && player.x + player.width > plat.x &&
             player.y < plat.y + plat.height && player.y + player.height > plat.y) {
-            const ox = Math.min(player.x + player.width,  plat.x + plat.width)  - Math.max(player.x, plat.x);
+            const ox = Math.min(player.x + player.width, plat.x + plat.width) - Math.max(player.x, plat.x);
             const oy = Math.min(player.y + player.height, plat.y + plat.height) - Math.max(player.y, plat.y);
             if (ox < oy) {
                 if (player.velocityX > 0) player.x = plat.x - player.width;
@@ -400,70 +414,89 @@ function _step(dt) {
                 player.velocityX = 0;
             }
         }
-    });
+    }
 
-    // Enemies
-    enemies.forEach(enemy => {
-        if (!enemy.alive) { if (enemy.y < canvas.height + 50) enemy.y += 4 * mod; return; }
+    // Enemies (optimiert)
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const enemy = enemies[i];
+        if (!enemy.alive) { 
+            if (enemy.y < canvas.height + 60) enemy.y += 4 * mod; 
+            else enemies.splice(i, 1);
+            continue; 
+        }
         enemy.velocityY += GRAVITY * mod;
         if (enemy.velocityY > MAX_FALL_SPEED) enemy.velocityY = MAX_FALL_SPEED;
         enemy.x += enemy.speed * mod;
         enemy.y += enemy.velocityY * mod;
 
-        platforms.filter(p =>
-            p.x + p.width > enemy.x - 50 && p.x < enemy.x + enemy.width + 50 &&
-            p.y + p.height > enemy.y - 50 && p.y < enemy.y + enemy.height + 50
-        ).forEach(plat => {
+        const nearPlat = platforms.filter(p =>
+            p.x + p.width > enemy.x - 55 && p.x < enemy.x + enemy.width + 55 &&
+            p.y + p.height > enemy.y - 55 && p.y < enemy.y + enemy.height + 55
+        );
+
+        for (let j = 0; j < nearPlat.length; j++) {
+            const plat = nearPlat[j];
             if (enemy.x < plat.x + plat.width && enemy.x + enemy.width > plat.x &&
                 enemy.y < plat.y + plat.height && enemy.y + enemy.height > plat.y) {
-                const ox = Math.min(enemy.x + enemy.width,  plat.x + plat.width)  - Math.max(enemy.x, plat.x);
+                const ox = Math.min(enemy.x + enemy.width, plat.x + plat.width) - Math.max(enemy.x, plat.x);
                 const oy = Math.min(enemy.y + enemy.height, plat.y + plat.height) - Math.max(enemy.y, plat.y);
                 if (oy < ox) {
                     if (enemy.velocityY >= 0 && enemy.y + enemy.height - oy <= plat.y + 1) {
-                        enemy.y = plat.y - enemy.height; enemy.velocityY = 0;
+                        enemy.y = plat.y - enemy.height; 
+                        enemy.velocityY = 0;
                     }
                 } else {
-                    enemy.speed *= -1; enemy.x += enemy.speed * mod * 2;
+                    enemy.speed *= -1; 
+                    enemy.x += enemy.speed * mod * 2;
                 }
             }
-        });
+        }
 
         if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
             player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) {
-            if (player.velocityY > 0 && player.y + player.height <= enemy.y + 20) {
-                enemy.alive = false; player.velocityY = -JUMP_FORCE * 0.65; score += 10; playSound(soundStomp);
-            } else { triggerDyingSequence(); }
+            if (player.velocityY > 0 && player.y + player.height <= enemy.y + 21) {
+                enemy.alive = false; 
+                player.velocityY = -JUMP_FORCE * 0.67; 
+                score += 10; 
+                playSound(soundStomp);
+            } else { 
+                triggerDyingSequence(); 
+            }
         }
-        if (enemy.y > canvas.height) enemy.alive = false;
-    });
+        if (enemy.y > canvas.height + 40) enemy.alive = false;
+    }
 
-    // Array-Bloat verhindern
-    if (enemies.length > 20) enemies = enemies.filter(e => e.alive || e.y < canvas.height + 100);
-    if (coins.length  > 50) coins   = coins.filter(c => !c.collected);
+    // Cleanup
+    if (enemies.length > 18) enemies = enemies.filter(e => e.alive || e.y < canvas.height + 110);
+    if (coins.length > 48) coins = coins.filter(c => !c.collected);
 
     // Coins
-    coins.forEach(coin => {
+    for (let i = 0; i < coins.length; i++) {
+        const coin = coins[i];
         if (!coin.collected &&
             player.x < coin.x + 20 && player.x + player.width > coin.x &&
-            player.y < coin.y + (player.isDucking ? 28 : 20) && player.y + player.height > coin.y) {
-            coin.collected = true; score += 1; playSound(soundCoin);
+            player.y < coin.y + (player.isDucking ? 28 : 21) && player.y + player.height > coin.y) {
+            coin.collected = true; 
+            score += 1; 
+            playSound(soundCoin);
         }
-    });
+    }
 
-    // Flagge
+    // Flagge & Tod
     if (player.x < flagPole.x + flagPole.width && player.x + player.width > flagPole.x &&
         player.y < flagPole.y + flagPole.height && player.y + player.height > flagPole.y) {
-        currentLevel++; triggerWinningSequence();
+        currentLevel++; 
+        triggerWinningSequence();
     }
-    if (player.y > canvas.height) triggerDyingSequence();
+    if (player.y > canvas.height + 20) triggerDyingSequence();
 
-    // Kamera
-    let targetCamX = player.x - canvas.width / 2.6;
+    // Kamera (smoother)
+    let targetCamX = player.x - canvas.width / 2.75;
     if (targetCamX < 0) targetCamX = 0;
-    cameraX += (targetCamX - cameraX) * 0.05 * mod;
+    cameraX += (targetCamX - cameraX) * 0.068 * mod;
 }
 
-// --- RENDER ---
+// --- ORIGINALE RENDER FUNKTIONEN (unverändert) ---
 function drawRetroBlock(x, y, w, h, base, dark, light) {
     ctx.fillStyle = base;  ctx.fillRect(x, y, w, h);
     ctx.fillStyle = light; ctx.fillRect(x, y, w, 2); ctx.fillRect(x, y, 2, h);
@@ -474,7 +507,6 @@ function drawRetroBlock(x, y, w, h, base, dark, light) {
 }
 
 function draw() {
-    // Himmel-Gradient (manuell, damit clearRect nicht schwarz hinterlaesst)
     const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
     sky.addColorStop(0,    '#5c94fc');
     sky.addColorStop(0.70, '#98f8f8');
@@ -576,7 +608,7 @@ function draw() {
     ctx.fillStyle='#ff2222'; ctx.beginPath();
     ctx.moveTo(flagPole.x,flagPole.y+20); ctx.lineTo(flagPole.x-45,flagPole.y+40+fw); ctx.lineTo(flagPole.x,flagPole.y+60); ctx.fill();
 
-    // Spieler
+    // Spieler (Original-Textur)
     const isMoving = Math.abs(player.velocityX) > 0.15 && player.grounded;
     const ws = Math.sin(walkDistanceCounter * 0.035);
     if (player.isDucking) {
