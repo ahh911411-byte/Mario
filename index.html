@@ -4,6 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Super Level Infinitum - Universal Sync</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Mario Infinite">
+
+    <link rel="manifest" href="manifest.json">
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log("ServiceWorker erfolgreich registriert!", reg.scope))
+            .catch(err => console.log("ServiceWorker Fehler:", err));
+        });
+      }
+    </script>
+
     <style>
         * {
             margin: 0;
@@ -174,11 +191,11 @@ function stopMusic() {
     musicMain.currentTime = 0;
 }
 
-// --- PERFEKT BALANCIERTE UNIVERSAL-WERTE ---
+// --- BALANCIERTE UNIVERSAL-WERTE ---
 const GRAVITY = 0.4;         
 const JUMP_FORCE = 12.5;       
 const MAX_FALL_SPEED = 12.0;   
-const ACCELERATION = 1.0;     // Deine gewünschte Beschleunigung bleibt auf 1!
+const ACCELERATION = 1.0;     
 const FRICTION = 0.15;      
 const PLAYER_MAX_SPEED = 5.2; 
 
@@ -190,10 +207,7 @@ let animationTimer = 0;
 let goombaSpawnCooldown = 0; 
 let restartEnableTime = 0; 
 
-// Zeitmessung für Delta-Time
 let lastTime = performance.now();
-
-// Distanzzähler zur Berechnung der Beinbewegung
 let walkDistanceCounter = 0;
 
 const keys = { right: false, left: false, up: false, down: false, jumpPressed: false };
@@ -208,7 +222,6 @@ window.addEventListener('keydown', (e) => {
     
     if ((gameState === 'GAMEOVER' || gameState === 'WIN') && e.code === 'KeyR') {
         if (Date.now() < restartEnableTime) return; 
-        
         gameState = 'PLAYING';
         startNewGame();
         playSound(soundStart);
@@ -385,11 +398,39 @@ function triggerWinningSequence() {
     playSound(soundComplete);
 }
 
+// Eine Hilfsfunktion zur präzisen Kollisionsprüfung einzelner Achsen-Schritte
+function checkPlatformCollisions(stepX, stepY) {
+    platforms.forEach(plat => {
+        if (player.x < plat.x + plat.width && player.x + player.width > plat.x &&
+            player.y < plat.y + plat.height && player.y + player.height > plat.y) {
+            
+            let overlapX = Math.min(player.x + player.width, plat.x + plat.width) - Math.max(player.x, plat.x);
+            let overlapY = Math.min(player.y + player.height, plat.y + plat.height) - Math.max(player.y, plat.y);
+
+            if (overlapX > overlapY) {
+                if (player.velocityY > 0 && stepY > 0) {
+                    player.y -= overlapY;
+                    player.velocityY = 0;
+                    player.grounded = true;
+                } else if (player.velocityY < 0 && stepY < 0) {
+                    player.y += overlapY;
+                    player.velocityY = 0;
+                    if(plat.type === 'lucky') {
+                        plat.type = 'used';
+                        score += 5;
+                        playSound(soundCoin); 
+                    }
+                }
+            } else {
+                if (player.velocityX > 0 && stepX > 0) player.x -= overlapX;
+                else if (player.velocityX < 0 && stepX < 0) player.x += overlapX;
+            }
+        }
+    });
+}
+
 function update(dt) {
-    // Falls das iPad laggt, deckeln wir dt, damit Mario nicht durch Wände teleportiert
     if (dt > 0.1) dt = 0.1;
-    
-    // EXAKTER UNIVERSELLER TIMING MODIFIER (Gleicht Ruckler und FPS-Unterschiede perfekt aus!)
     let modifier = dt * 60;
 
     if (gameState === 'DYING') {
@@ -426,12 +467,11 @@ function update(dt) {
         player.y -= 20;      
     }
 
-    // Goomba Spawner Zeitbasiert korrigiert für langsame Bildschirme
     if (goombaSpawnCooldown > 0) {
         goombaSpawnCooldown -= dt;
     } else {
         if (player.x < flagPole.x - 500) {
-            if (Math.random() < 0.3) { // Leicht erhöhte Chance pro Sekunde
+            if (Math.random() < 0.3) { 
                 let spawnX = cameraX + canvas.width + 40;
                 let speedMultiplier = 1.3 + (Math.random() * 0.5) + (currentLevel * 0.1);
                 
@@ -453,10 +493,12 @@ function update(dt) {
     let currentAcc = player.isDucking ? ACCELERATION * 0.2 : ACCELERATION;
 
     if (keys.right) {
+        if (player.velocityX < 1.2) player.velocityX = 1.2; // iPad Kickstart links/rechts
         player.velocityX += currentAcc * modifier;
         if (player.velocityX > currentMaxSpeed) player.velocityX = currentMaxSpeed;
         player.facing = 'right';
     } else if (keys.left) {
+        if (player.velocityX > -1.2) player.velocityX = -1.2;
         player.velocityX -= currentAcc * modifier;
         if (player.velocityX < -currentMaxSpeed) player.velocityX = -currentMaxSpeed;
         player.facing = 'left';
@@ -477,43 +519,31 @@ function update(dt) {
 
     if (player.velocityY > MAX_FALL_SPEED) player.velocityY = MAX_FALL_SPEED;
     
-    player.x += player.velocityX * modifier;
-    player.y += player.velocityY * modifier;
+    // --- BOMBEN-SICHERE ANTI-GLITCH-POSITIONIERUNG ---
+    // Wir teilen die Bewegung in maximal 4 kleine Pixelschritte auf, falls das Spiel laggt!
+    let totalMoveX = player.velocityX * modifier;
+    let totalMoveY = player.velocityY * modifier;
+    let steps = Math.ceil(Math.max(Math.abs(totalMoveX), Math.abs(totalMoveY)) / 4);
+    if(steps < 1) steps = 1;
+
     player.grounded = false;
+
+    for (let s = 0; s < steps; s++) {
+        let stepX = totalMoveX / steps;
+        player.x += stepX;
+        checkPlatformCollisions(stepX, 0);
+
+        let stepY = totalMoveY / steps;
+        player.y += stepY;
+        checkPlatformCollisions(0, stepY);
+    }
 
     if (player.x < 0) {
         player.x = 0;
         player.velocityX = 0;
     }
 
-    platforms.forEach(plat => {
-        if (player.x < plat.x + plat.width && player.x + player.width > plat.x &&
-            player.y < plat.y + plat.height && player.y + player.height > plat.y) {
-            
-            let overlapX = Math.min(player.x + player.width, plat.x + plat.width) - Math.max(player.x, plat.x);
-            let overlapY = Math.min(player.y + player.height, plat.y + plat.height) - Math.max(player.y, plat.y);
-
-            if (overlapX > overlapY) {
-                if (player.velocityY > 0 && player.y + player.height - (player.velocityY * modifier) <= plat.y + 12) {
-                    player.y -= overlapY;
-                    player.velocityY = 0;
-                    player.grounded = true;
-                } else if (player.velocityY < 0) {
-                    player.y += overlapY;
-                    player.velocityY = 0;
-                    if(plat.type === 'lucky') {
-                        plat.type = 'used';
-                        score += 5;
-                        playSound(soundCoin); 
-                    }
-                }
-            } else {
-                if (player.velocityX > 0 && player.x + player.width - (player.velocityX * modifier) <= plat.x + 6) player.x -= overlapX;
-                else if (player.velocityX < 0 && player.x - (player.velocityX * modifier) >= plat.x + plat.width - 6) player.x += overlapX;
-            }
-        }
-    });
-
+    // Gegner-Updates und Kollisionen
     enemies.forEach(enemy => {
         if (!enemy.alive) {
             if (enemy.y < canvas.height + 50) enemy.y += 4 * modifier;
@@ -550,7 +580,6 @@ function update(dt) {
         if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
             player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) {
             
-            // Bombensichere Abfrage: Im Sinkflug wird IMMER gekillt, Toleranzbereich an variable Frameraten angepasst
             if (player.velocityY > 0 && (player.y + player.height) <= enemy.y + 24) {
                 enemy.alive = false;
                 player.velocityY = -JUMP_FORCE * 0.65; 
