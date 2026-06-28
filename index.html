@@ -146,7 +146,6 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
-// Himmel & Tag/Nacht Variablen
 let skyGradient;
 let isNight = false;
 
@@ -408,6 +407,20 @@ function _step(dt) {
 
     animationTimer += mod;
 
+    if (keys.down && player.grounded) {
+        if (!player.isDucking) {
+            player.isDucking = true;
+            player.y += 22; 
+            player.height = 26;
+        }
+    } else {
+        if (player.isDucking) {
+            player.isDucking = false;
+            player.y -= 22;
+            player.height = 48;
+        }
+    }
+
     if (enemySpawnCooldown > 0) {
         enemySpawnCooldown -= dt;
     } else if (player.x < flagPole.x - 550) {
@@ -415,7 +428,6 @@ function _step(dt) {
             const spawnX = cameraX + canvas.width + 45;
             const randType = Math.random();
             
-            // Spawnchancen: Goombas 50%, Grüne Koopas 25%, Rote Koopas 25%
             if (randType < 0.50) {
                 enemies.push({ 
                     type: 'GOOMBA', state: 'WALK', x: spawnX, y: 150, width: 36, height: 36, 
@@ -632,7 +644,7 @@ function _step(dt) {
         const coin = coins[i];
         if (!coin.collected &&
             player.x < coin.x + 20 && player.x + player.width > coin.x &&
-            player.y < coin.y + (player.isDucking ? 28 : 21) && player.y + player.height > coin.y) {
+            player.y < coin.y + (player.isDucking ? 16 : 21) && player.y + player.height > coin.y) {
             coin.collected = true;
             score += 1;
             coinPool.play();
@@ -700,7 +712,6 @@ function drawKoopa(ctx, enemy) {
     if (enemy.state === 'WALK') {
         const legBlink = Math.floor(animationTimer / 10) % 2 === 0;
 
-        // Füße (leicht nach hinten versetzt zum krummen Körper)
         ctx.fillStyle = skinColor;
         if (legBlink) {
             ctx.fillRect(10, 32, 6, 12); ctx.fillRect(22, 32, 6, 12);
@@ -710,7 +721,6 @@ function drawKoopa(ctx, enemy) {
             ctx.fillStyle = '#000'; ctx.fillRect(12, 42, 4, 2); ctx.fillRect(24, 42, 4, 2);
         }
 
-        // Krummer Retro-Look: Panzer leicht nach hinten geschoben (x=14 statt x=10)
         ctx.fillStyle = '#000000'; ctx.fillRect(14, 12, 18, 24); 
         ctx.fillStyle = mainColor; ctx.fillRect(16, 14, 14, 20); 
         ctx.fillStyle = lightShell; 
@@ -718,13 +728,11 @@ function drawKoopa(ctx, enemy) {
         
         ctx.fillStyle = '#f8f8f8'; ctx.fillRect(12, 16, 4, 18);
 
-        // Angewinkelter Hals und nach vorne/unten versetzter Kopf (x=2, y=8 statt y=2)
         ctx.fillStyle = skinColor;
-        ctx.fillRect(8, 16, 6, 8);  // Halsverbindung
-        ctx.fillRect(0, 8, 12, 12); // Kopfbasis
-        ctx.fillRect(0, 12, 14, 8);  // Schnauze nach vorne gestreckt
+        ctx.fillRect(8, 16, 6, 8);  
+        ctx.fillRect(0, 8, 12, 12); 
+        ctx.fillRect(0, 12, 14, 8);  
         
-        // Augen
         ctx.fillStyle = '#ffffff'; ctx.fillRect(4, 10, 4, 5);
         ctx.fillStyle = '#000000'; ctx.fillRect(4, 10, 2, 3);
 
@@ -750,6 +758,153 @@ function drawKoopa(ctx, enemy) {
         ctx.fillRect(4, 20, 24, 4);
         ctx.fillStyle = '#000000'; 
         ctx.fillRect(4, 24, 24, 1);
+    }
+
+    ctx.restore();
+}
+
+function drawPlayer(ctx, p) {
+    ctx.save();
+    
+    if (p.facing === 'left') {
+        ctx.translate(p.x + p.width, p.y);
+        ctx.scale(-1, 1);
+    } else {
+        ctx.translate(p.x, p.y);
+    }
+
+    // Klassische, kräftige Retro-Farben
+    const red = '#e41212';
+    const blue = '#143cc4';
+    const skin = '#ffcca4';
+    const brown = '#6c3a04';
+    const white = '#ffffff';
+    const yellow = '#fcd800';
+
+    if (p.isDucking) {
+        // --- GEQUETSCHTER / PLATTGEDRÜCKTER RETRO LOOK ---
+        // Die originale Grafik wird vertikal stark gestaucht, Mütze verdeckt fast alles.
+
+        // Schuhe flach am Boden
+        ctx.fillStyle = brown;
+        ctx.fillRect(4, 22, 10, 4);
+        ctx.fillRect(16, 22, 10, 4);
+
+        // Plattgedrückte blaue Hose
+        ctx.fillStyle = blue;
+        ctx.fillRect(6, 12, 18, 10);
+        // Gelbe Punkte lugen hervor
+        ctx.fillStyle = yellow;
+        ctx.fillRect(8, 14, 3, 2);
+        ctx.fillRect(19, 14, 3, 2);
+
+        // Gequetschter roter Oberkörper & Ärmel
+        ctx.fillStyle = red;
+        ctx.fillRect(4, 8, 22, 4);
+        ctx.fillRect(2, 10, 3, 6);
+        ctx.fillRect(25, 10, 3, 6);
+        ctx.fillStyle = white;
+        ctx.fillRect(1, 14, 4, 4);
+        ctx.fillRect(25, 14, 4, 4);
+
+        // Haare hinten rausschauend
+        ctx.fillStyle = brown;
+        ctx.fillRect(4, 6, 4, 6);
+
+        // Gequetschtes Gesicht (Augen verschwinden fast unter der tiefen Mütze)
+        ctx.fillStyle = skin;
+        ctx.fillRect(8, 4, 14, 5);
+        ctx.fillRect(22, 5, 5, 4); // Nase steht vorn raus
+
+        // Schnurrbart kompakt darunter eingeklemmt
+        ctx.fillStyle = brown;
+        ctx.fillRect(16, 7, 10, 2);
+
+        // Augen sind fast vollständig durch die Mütze verdeckt (nur 1 Pixel Zeile Sichtbarkeit)
+        ctx.fillStyle = white; ctx.fillRect(18, 4, 3, 1);
+        ctx.fillStyle = '#000';  ctx.fillRect(19, 4, 1, 1);
+
+        // Breite, platte Mütze deckt den Kopf komplett ab
+        ctx.fillStyle = red;
+        ctx.fillRect(6, 0, 16, 3);
+        ctx.fillRect(4, 2, 23, 2);
+    } else {
+        // --- KLASSISCHER KANTIGER PIXEL MARIO LOOK ---
+        const isMoving = Math.abs(p.velocityX) > 0.15 && p.grounded;
+        const wave = Math.sin(walkDistanceCounter * 0.05);
+        
+        let legOffset1 = 0;
+        let legOffset2 = 0;
+        let armOffset = 0;
+        if (isMoving) {
+            legOffset1 = Math.floor(wave * 3);
+            legOffset2 = -Math.floor(wave * 3);
+            armOffset = Math.floor(wave * 3);
+        } else if (!p.grounded) {
+            legOffset1 = -2;
+            legOffset2 = 3;
+            armOffset = -3;
+        }
+
+        // 1. SCHUHE (Kantige Blöcke)
+        ctx.fillStyle = brown;
+        ctx.fillRect(4 + legOffset1, 40, 10, 8); 
+        ctx.fillRect(16 + legOffset2, 40, 10, 8); 
+
+        // 2. HOSE (Klassisch Latzhose)
+        ctx.fillStyle = blue;
+        ctx.fillRect(6, 24, 18, 16); 
+        ctx.fillRect(6 + legOffset1, 34, 7, 6); 
+        ctx.fillRect(15 + legOffset2, 34, 7, 6); 
+        
+        // Träger
+        ctx.fillRect(8, 18, 4, 6);
+        ctx.fillRect(18, 18, 4, 6);
+        
+        // Knöpfe
+        ctx.fillStyle = yellow;
+        ctx.fillRect(8, 24, 3, 3);
+        ctx.fillRect(19, 24, 3, 3);
+
+        // 3. SHIRT (Rot, klare große Pixelstrukturen)
+        ctx.fillStyle = red;
+        ctx.fillRect(8, 16, 14, 8); 
+        ctx.fillRect(3 - armOffset, 20 + armOffset, 4, 8); 
+        ctx.fillRect(23 + armOffset, 18 - armOffset, 4, 8); 
+
+        // 4. HANDSCHUHE (Weiß)
+        ctx.fillStyle = white;
+        ctx.fillRect(2 - armOffset, 28 + armOffset, 5, 5); 
+        ctx.fillRect(23 + armOffset, 26 - armOffset, 5, 5); 
+
+        // 5. KOPF & GESICHT (Kantig, Retro-Proportionen)
+        ctx.fillStyle = brown;
+        ctx.fillRect(6, 8, 5, 10);
+        ctx.fillRect(8, 14, 4, 4);
+
+        ctx.fillStyle = skin;
+        ctx.fillRect(10, 6, 13, 12);
+        ctx.fillRect(23, 10, 5, 4); // Nase
+
+        // Schnurrbart
+        ctx.fillStyle = brown;
+        ctx.fillRect(17, 14, 10, 4);
+
+        // Auge
+        ctx.fillStyle = white;
+        ctx.fillRect(17, 6, 4, 5);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(19, 6, 2, 4);
+
+        // Ohr
+        ctx.fillStyle = skin;
+        ctx.fillRect(8, 10, 3, 4);
+
+        // 6. ROTE MÜTZE
+        ctx.fillStyle = red;
+        ctx.fillRect(8, 0, 15, 4);  
+        ctx.fillRect(5, 3, 19, 3);  
+        ctx.fillRect(10, 6, 20, 2); // Schirm nach vorne
     }
 
     ctx.restore();
@@ -832,36 +987,28 @@ function draw() {
             if (enemy.alive) {
                 const step = Math.floor(animationTimer / 10) % 2 === 0;
 
-                // 1. Schirmoberseite (Pilzkopf)
                 ctx.fillStyle = '#000000'; ctx.fillRect(enemy.x + 2, enemy.y, 32, 18); 
                 ctx.fillStyle = '#803000'; ctx.fillRect(enemy.x + 4, enemy.y + 2, 28, 16); 
                 ctx.fillStyle = '#b85c18'; 
                 ctx.fillRect(enemy.x + 8, enemy.y + 2, 20, 4); 
                 ctx.fillRect(enemy.x + 12, enemy.y + 6, 10, 2);
 
-                // 2. Das helle Gesicht / Strunk
                 ctx.fillStyle = '#000000'; ctx.fillRect(enemy.x + 6, enemy.y + 18, 24, 11); 
                 ctx.fillStyle = '#ffcc99'; ctx.fillRect(enemy.x + 8, enemy.y + 18, 20, 9); 
 
-                // 3. Grimmige, schräge Retro-Augenbrauen & Augen
                 ctx.fillStyle = '#000000';
-                // Linke Augenbraue (Zieht schräg nach innen/unten)
                 ctx.fillRect(enemy.x + 8,  enemy.y + 19, 3, 2);
                 ctx.fillRect(enemy.x + 10, enemy.y + 20, 4, 2);
-                // Rechte Augenbraue (Zieht schräg nach innen/unten)
                 ctx.fillRect(enemy.x + 24, enemy.y + 19, 3, 2);
                 ctx.fillRect(enemy.x + 21, enemy.y + 20, 4, 2);
                 
-                // Augen unter den Augenbrauen platziert
                 ctx.fillStyle = '#ffffff'; 
                 ctx.fillRect(enemy.x + 11, enemy.y + 22, 3, 4); ctx.fillRect(enemy.x + 21, enemy.y + 22, 3, 4);
                 ctx.fillStyle = '#000000'; 
                 ctx.fillRect(enemy.x + 11, enemy.y + 22, 2, 3); ctx.fillRect(enemy.x + 22, enemy.y + 22, 2, 3);
 
-                // Wütender Mundstrich
                 ctx.fillRect(enemy.x + 14, enemy.y + 26, 8, 1);
 
-                // 4. Füße beim Gehen
                 ctx.fillStyle = '#000000';
                 if (step) {
                     ctx.fillRect(enemy.x + 2, enemy.y + 28, 13, 8);  
@@ -908,42 +1055,7 @@ function draw() {
     ctx.fillRect(fx + 28, fy + 13, 4, 4);
     ctx.fillRect(fx + 18, fy + 21, 12, 3);
 
-    const isMoving = Math.abs(player.velocityX) > 0.15 && player.grounded;
-    const ws = Math.sin(walkDistanceCounter * 0.035);
-    if (player.isDucking) {
-        ctx.fillStyle='#0044cc'; ctx.fillRect(player.x+2,player.y+10,player.width-4,player.height-14);
-        ctx.fillStyle='#ffcc00'; ctx.fillRect(player.x+8,player.y+13,3,3); ctx.fillRect(player.x+20,player.y+13,3,3);
-        ctx.fillStyle='#ffcc99'; ctx.fillRect(player.x+6,player.y+2,player.width-12,10);
-        ctx.fillStyle='#ff2222'; ctx.fillRect(player.x+4,player.y-2,player.width-8,5);
-        ctx.fillRect(player.x+(player.facing==='right'?10:-2),player.y+1,player.width-8,2);
-        ctx.fillStyle='#4a2306'; ctx.fillRect(player.x+1,player.y+player.height-5,12,5); ctx.fillRect(player.x+player.width-13,player.y+player.height-5,12,5);
-        ctx.fillStyle='#000';
-        if (player.facing==='right') ctx.fillRect(player.x+player.width-12,player.y+4,3,3);
-        else ctx.fillRect(player.x+9,player.y+4,3,3);
-    } else {
-        ctx.fillStyle='#0044cc'; ctx.fillRect(player.x+4,player.y+14,player.width-8,player.height-20);
-        ctx.fillStyle='#ff2222'; ctx.fillRect(player.x,player.y+14,6,16); ctx.fillRect(player.x+player.width-6,player.y+14,6,16);
-        ctx.fillStyle='#ffcc00'; ctx.fillRect(player.x+8,player.y+18,3,3); ctx.fillRect(player.x+20,player.y+18,3,3);
-        ctx.fillStyle='#fff';    ctx.fillRect(player.x-2,player.y+24,4,5); ctx.fillRect(player.x+player.width-2,player.y+24,4,5);
-        ctx.fillStyle='#ffcc99'; ctx.fillRect(player.x+4,player.y+4,player.width-8,12);
-        ctx.fillStyle='#ff2222'; ctx.fillRect(player.x+2,player.y,player.width-4,6);
-        ctx.fillRect(player.x+(player.facing==='right'?6:-2),player.y+4,player.width-4,2);
-        ctx.fillStyle='#4a2306';
-        if (isMoving) {
-            const o = ws * 4;
-            ctx.fillRect(player.x+2+o,player.y+player.height-6,11,6);
-            ctx.fillRect(player.x+player.width-13-o,player.y+player.height-6,11,6);
-        } else if (!player.grounded) {
-            ctx.fillRect(player.x,player.y+player.height-8,11,6);
-            ctx.fillRect(player.x+player.width-11,player.y+player.height-6,11,6);
-        } else {
-            ctx.fillRect(player.x+2,player.y+player.height-6,11,6);
-            ctx.fillRect(player.x+player.width-13,player.y+player.height-6,11,6);
-        }
-        ctx.fillStyle='#000';
-        if (player.facing==='right') { ctx.fillRect(player.x+player.width-10,player.y+6,4,4); ctx.fillStyle='#4a2306'; ctx.fillRect(player.x+player.width-8,player.y+10,8,4); }
-        else                          { ctx.fillRect(player.x+6,player.y+6,4,4);               ctx.fillStyle='#4a2306'; ctx.fillRect(player.x,player.y+10,8,4); }
-    }
+    drawPlayer(ctx, player);
 
     ctx.restore();
 
