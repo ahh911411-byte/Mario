@@ -358,6 +358,8 @@ function triggerDyingSequence() {
     player.velocityY = -6;
 }
 function triggerWinningSequence() {
+// Wenn wir schon im Gewinn-Modus sind, brich sofort ab, damit der Sound nicht neu startet!
+    if (gameState === 'WINNING') return;
     gameState = 'WINNING'; restartEnableTime = Date.now() + 5000;
     stopMusic(); stopAllSounds(); playSound(soundComplete);
 }
