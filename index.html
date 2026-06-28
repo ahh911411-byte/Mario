@@ -144,11 +144,25 @@
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+// Kein Smoothing: sorgt dafür, dass der gecachte Boden-Textur-Blit (s.u.) ein exakter
+// 1:1-Pixelkopiervorgang ist (keine Interpolations-Unschärfe). Betrifft nur drawImage,
+// alle anderen (Vektor-)Zeichenbefehle bleiben unverändert.
+ctx.imageSmoothingEnabled = false;
+
+// Himmel-Gradient einmalig erzeugen statt jeden Frame neu (Canvas-Größe ändert sich nie) -
+// optisch 100% identisch, spart pro Frame eine Gradient-Allokation + 3 addColorStop-Aufrufe.
+const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+skyGradient.addColorStop(0,    '#5c94fc');
+skyGradient.addColorStop(0.70, '#98f8f8');
+skyGradient.addColorStop(1.0,  '#b8f818');
+
+// ctx.font nur setzen, wenn er sich tatsächlich ändert (Schriftwechsel ist auf
+// Canvas relativ teuer; spart unnötige Wechsel z.B. bei mehreren "?"-Blöcken).
+let _currentFont = '';
+function setFont(f) { if (_currentFont !== f) { ctx.font = f; _currentFont = f; } }
 
 // --- SOUND ---
 const soundStart    = new Audio('audio/sounds/here_we_go.wav');
-const soundCoin     = new Audio('audio/sounds/coin.mp3');
-const soundStomp    = new Audio('audio/sounds/goomba_stomp.mp3');
 const soundComplete = new Audio('audio/sounds/level_complete.mp3');
 const soundDeath    = new Audio('audio/sounds/death.mp3');
 soundComplete.volume = 0.4;
@@ -156,9 +170,37 @@ const musicMain = new Audio('audio/sounds/main_theme.mp3');
 musicMain.loop = true;
 musicMain.volume = 0.2;
 
+// Sound-Pool: verhindert Ruckler/Stottern auf iOS, wenn z.B. an einem Block-Cluster
+// mehrere Coin-Sounds in sehr kurzer Folge ausgelöst werden (gleiches <audio>-Element
+// erneut zu starten ist auf iOS Safari teuer und kann den Haupt-Thread kurz blockieren).
+function makeSoundPool(src, volume, size) {
+    const items = [];
+    for (let i = 0; i < size; i++) {
+        const a = new Audio(src);
+        a.volume = volume;
+        items.push(a);
+    }
+    let idx = 0;
+    return {
+        play() {
+            const a = items[idx];
+            idx = (idx + 1) % items.length;
+            a.currentTime = 0;
+            a.play().catch(() => {});
+        },
+        stopAll() {
+            for (let i = 0; i < items.length; i++) { items[i].pause(); items[i].currentTime = 0; }
+        }
+    };
+}
+const coinPool  = makeSoundPool('audio/sounds/coin.mp3', 1, 4);
+const stompPool = makeSoundPool('audio/sounds/goomba_stomp.mp3', 1, 3);
+
 function playSound(a) { a.currentTime = 0; a.play().catch(e => {}); }
 function stopAllSounds() {
-    [soundStart, soundCoin, soundStomp, soundComplete, soundDeath].forEach(s => { s.pause(); s.currentTime = 0; });
+    [soundStart, soundComplete, soundDeath].forEach(s => { s.pause(); s.currentTime = 0; });
+    coinPool.stopAll();
+    stompPool.stopAll();
 }
 function stopMusic() { musicMain.pause(); musicMain.currentTime = 0; }
 
@@ -242,6 +284,11 @@ function setupTouchControls() {
 
 const player = { x: 120, y: 300, width: 32, height: 48, velocityX: 0, velocityY: 0, grounded: false, facing: 'right', isDucking: false };
 let platforms = [], coins = [], enemies = [];
+// Wiederverwendete Puffer-Arrays statt .filter() im Hot-Path (verhindert ständige
+// neue Array-Allokationen pro Substep/pro Gegner -> deutlich weniger GC-Pausen,
+// besonders dort wo viele Plattformen nah beieinander liegen, z.B. Block-Cluster).
+const _nearPlayerBuf = [];
+const _nearEnemyBuf  = [];
 const flagPole = { x: 2500, y: 130, width: 10, height: 270 };
 let cameraX = 0;
 
@@ -369,12 +416,17 @@ function _step(dt) {
     player.grounded = false;
     if (player.x < 0) { player.x = 0; player.velocityX = 0; }
 
-    // Optimierte Kollision
+    // Optimierte Kollision (keine Array-Allokation mehr pro Substep)
     const MARGIN = 110;
-    const near = platforms.filter(p =>
-        p.x + p.width > player.x - MARGIN && p.x < player.x + player.width + MARGIN &&
-        p.y + p.height > player.y - MARGIN && p.y < player.y + player.height + MARGIN
-    );
+    _nearPlayerBuf.length = 0;
+    for (let pi = 0; pi < platforms.length; pi++) {
+        const p = platforms[pi];
+        if (p.x + p.width > player.x - MARGIN && p.x < player.x + player.width + MARGIN &&
+            p.y + p.height > player.y - MARGIN && p.y < player.y + player.height + MARGIN) {
+            _nearPlayerBuf.push(p);
+        }
+    }
+    const near = _nearPlayerBuf;
 
     // Pass 1 – Y
     for (let i = 0; i < near.length; i++) {
@@ -394,7 +446,7 @@ function _step(dt) {
                     if (plat.type === 'lucky') { 
                         plat.type = 'used'; 
                         score += 5; 
-                        playSound(soundCoin); 
+                        coinPool.play(); 
                     }
                 }
             }
@@ -429,10 +481,15 @@ function _step(dt) {
         enemy.x += enemy.speed * mod;
         enemy.y += enemy.velocityY * mod;
 
-        const nearPlat = platforms.filter(p =>
-            p.x + p.width > enemy.x - 55 && p.x < enemy.x + enemy.width + 55 &&
-            p.y + p.height > enemy.y - 55 && p.y < enemy.y + enemy.height + 55
-        );
+        _nearEnemyBuf.length = 0;
+        for (let pi = 0; pi < platforms.length; pi++) {
+            const p = platforms[pi];
+            if (p.x + p.width > enemy.x - 55 && p.x < enemy.x + enemy.width + 55 &&
+                p.y + p.height > enemy.y - 55 && p.y < enemy.y + enemy.height + 55) {
+                _nearEnemyBuf.push(p);
+            }
+        }
+        const nearPlat = _nearEnemyBuf;
 
         for (let j = 0; j < nearPlat.length; j++) {
             const plat = nearPlat[j];
@@ -458,7 +515,7 @@ function _step(dt) {
                 enemy.alive = false; 
                 player.velocityY = -JUMP_FORCE * 0.67; 
                 score += 10; 
-                playSound(soundStomp);
+                stompPool.play();
             } else { 
                 triggerDyingSequence(); 
             }
@@ -466,9 +523,21 @@ function _step(dt) {
         if (enemy.y > canvas.height + 40) enemy.alive = false;
     }
 
-    // Cleanup
-    if (enemies.length > 18) enemies = enemies.filter(e => e.alive || e.y < canvas.height + 110);
-    if (coins.length > 48) coins = coins.filter(c => !c.collected);
+    // Cleanup (in-place, ohne neue Arrays zu erzeugen)
+    if (enemies.length > 18) {
+        let w = 0;
+        for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].alive || enemies[i].y < canvas.height + 110) enemies[w++] = enemies[i];
+        }
+        enemies.length = w;
+    }
+    if (coins.length > 48) {
+        let w = 0;
+        for (let i = 0; i < coins.length; i++) {
+            if (!coins[i].collected) coins[w++] = coins[i];
+        }
+        coins.length = w;
+    }
 
     // Coins
     for (let i = 0; i < coins.length; i++) {
@@ -478,7 +547,7 @@ function _step(dt) {
             player.y < coin.y + (player.isDucking ? 28 : 21) && player.y + player.height > coin.y) {
             coin.collected = true; 
             score += 1; 
-            playSound(soundCoin);
+            coinPool.play();
         }
     }
 
@@ -506,12 +575,33 @@ function drawRetroBlock(x, y, w, h, base, dark, light) {
     ctx.fillRect(x+3, y+h-5, 2, 2); ctx.fillRect(x+w-5, y+h-5, 2, 2);
 }
 
+// Boden-Textur einmal pro Plattform in einen Offscreen-Canvas vorrendern (exakt
+// dieselben Pixel/Farben wie zuvor) und danach nur noch per drawImage blitten.
+// Vorher: pro Boden-Stück bis zu 50+ einzelne fillRect-Aufrufe JEDEN Frame.
+// Das ist der Hauptgrund, warum es genau dort ruckelt, wo viele Plattformen/Blöcke
+// gleichzeitig sichtbar sind (z.B. an Block-Clustern mit Boden darunter).
+function getGroundTexture(plat) {
+    if (plat._tex) return plat._tex;
+    const fx = plat.x - Math.floor(plat.x);
+    const w = Math.ceil(fx + plat.width), h = Math.ceil(plat.height);
+    const tex = document.createElement('canvas');
+    tex.width = w; tex.height = h;
+    const tctx = tex.getContext('2d');
+    tctx.fillStyle = '#b84418'; tctx.fillRect(fx, 0, plat.width, plat.height);
+    for (let i = 0; i < plat.width; i += 16) {
+        tctx.fillStyle = '#983408';
+        tctx.fillRect(fx+i, 12, 1, plat.height - 12);
+        tctx.fillRect(fx+i, 28, 16, 1);
+    }
+    tctx.fillStyle = '#00a800'; tctx.fillRect(fx, 0, plat.width, 12);
+    tctx.fillStyle = '#b8f818'; tctx.fillRect(fx, 0, plat.width, 4);
+    plat._tex = tex;
+    plat._texDrawX = Math.floor(plat.x);
+    return tex;
+}
+
 function draw() {
-    const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    sky.addColorStop(0,    '#5c94fc');
-    sky.addColorStop(0.70, '#98f8f8');
-    sky.addColorStop(1.0,  '#b8f818');
-    ctx.fillStyle = sky;
+    ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
@@ -543,25 +633,17 @@ function draw() {
     const vL = cameraX - 50, vR = cameraX + canvas.width + 50;
 
     // Plattformen
-    platforms.forEach(plat => {
-        if (plat.x + plat.width < vL || plat.x > vR) return;
+    for (let pi = 0; pi < platforms.length; pi++) {
+        const plat = platforms[pi];
+        if (plat.x + plat.width < vL || plat.x > vR) continue;
         if (plat.type === 'ground') {
-            ctx.fillStyle = '#b84418'; ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
-            const ts = Math.max(0, Math.floor((cameraX - plat.x) / 16) * 16);
-            const te = Math.min(plat.width, Math.ceil((cameraX + canvas.width - plat.x) / 16) * 16 + 16);
-            for (let i = ts; i < te; i += 16) {
-                ctx.fillStyle = '#983408';
-                ctx.fillRect(plat.x+i, plat.y+12, 1, plat.height-12);
-                ctx.fillRect(plat.x+i, plat.y+28, 16, 1);
-            }
-            ctx.fillStyle = '#00a800'; ctx.fillRect(plat.x, plat.y, plat.width, 12);
-            ctx.fillStyle = '#b8f818'; ctx.fillRect(plat.x, plat.y, plat.width, 4);
+            ctx.drawImage(getGroundTexture(plat), plat._texDrawX, plat.y);
         } else if (plat.type === 'block') {
             drawRetroBlock(plat.x, plat.y, plat.width, plat.height, '#cc6633','#662200','#ff9966');
         } else if (plat.type === 'lucky') {
             const blink = Math.floor(animationTimer / 25) % 2 === 0;
             drawRetroBlock(plat.x, plat.y, plat.width, plat.height, blink?'#fcc018':'#cc9000','#553300','#ffea75');
-            ctx.fillStyle='#000'; ctx.font='bold 22px monospace'; ctx.fillText('?',plat.x+11,plat.y+25);
+            ctx.fillStyle='#000'; setFont('bold 22px monospace'); ctx.fillText('?',plat.x+11,plat.y+25);
             ctx.fillStyle='#fff'; ctx.fillText('?',plat.x+10,plat.y+24);
         } else if (plat.type === 'used') {
             drawRetroBlock(plat.x, plat.y, plat.width, plat.height, '#7c7c7c','#333333','#aaaaaa');
@@ -576,20 +658,22 @@ function draw() {
             ctx.strokeRect(plat.x-4,plat.y,plat.width+8,24);
             ctx.strokeRect(plat.x,plat.y+24,plat.width,plat.height-24);
         }
-    });
+    }
 
     // Coins
-    coins.forEach(coin => {
-        if (coin.collected || coin.x+20 < vL || coin.x > vR) return;
+    for (let i = 0; i < coins.length; i++) {
+        const coin = coins[i];
+        if (coin.collected || coin.x+20 < vL || coin.x > vR) continue;
         const cw = 16 * Math.abs(Math.sin(animationTimer * 0.04));
         ctx.fillStyle='#fcc018'; ctx.beginPath(); ctx.ellipse(coin.x+10,coin.y+10,cw/2+2,11,0,0,Math.PI*2); ctx.fill();
         ctx.fillStyle='#fff';    ctx.beginPath(); ctx.ellipse(coin.x+10,coin.y+10,cw/4,6,0,0,Math.PI*2);    ctx.fill();
         ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.stroke();
-    });
+    }
 
     // Enemies
-    enemies.forEach(enemy => {
-        if (enemy.x+enemy.width < vL || enemy.x > vR) return;
+    for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        if (enemy.x+enemy.width < vL || enemy.x > vR) continue;
         const w = Math.sin(animationTimer * 0.06) * 2;
         ctx.fillStyle='#803000'; ctx.beginPath(); ctx.arc(enemy.x+16,enemy.y+14,16,Math.PI,0); ctx.fill(); ctx.fillRect(enemy.x+4,enemy.y+14,24,12);
         ctx.fillStyle='#b85c18'; ctx.beginPath(); ctx.arc(enemy.x+16,enemy.y+12,14,Math.PI,0); ctx.fill(); ctx.fillRect(enemy.x+6,enemy.y+12,20,10);
@@ -599,7 +683,7 @@ function draw() {
         ctx.fillStyle='#fff'; ctx.fillRect(enemy.x+8,enemy.y+11,5,7); ctx.fillRect(enemy.x+19,enemy.y+11,5,7);
         ctx.fillStyle='#000'; ctx.fillRect(enemy.x+9,enemy.y+13,3,5); ctx.fillRect(enemy.x+20,enemy.y+13,3,5);
         ctx.fillRect(enemy.x+6,enemy.y+8,7,2); ctx.fillRect(enemy.x+19,enemy.y+8,7,2);
-    });
+    }
 
     // Flagge
     ctx.fillStyle='#dedede'; ctx.fillRect(flagPole.x,flagPole.y,flagPole.width,flagPole.height);
@@ -649,7 +733,7 @@ function draw() {
     ctx.restore();
 
     // HUD
-    ctx.fillStyle='#fff'; ctx.font='bold 22px "Courier New"';
+    ctx.fillStyle='#fff'; setFont('bold 22px "Courier New"');
     ctx.fillText('MARIO   SCORE', 30, 35);
     ctx.fillText(` 0000    ${score.toString().padStart(4,'0')}`, 30, 60);
     ctx.fillText(`WORLD 5-${currentLevel}`, canvas.width - 160, 35);
@@ -662,16 +746,16 @@ function draw() {
 function drawMenu() {
     ctx.fillStyle='rgba(0,0,0,0.75)'; ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.textAlign='center';
-    ctx.fillStyle='#ffcc00'; ctx.font='bold 46px "Courier New"'; ctx.fillText('SUPER MARIO BROS.', canvas.width/2, 160);
-    ctx.fillStyle='#fff';    ctx.font='bold 22px "Courier New"'; ctx.fillText('PROCEDURAL INFINITE', canvas.width/2, 210);
-    if (Math.floor(Date.now()/400)%2===0) { ctx.font='20px "Courier New"'; ctx.fillText('DRÜCKE ENTER ZUM STARTEN', canvas.width/2, 330); }
+    ctx.fillStyle='#ffcc00'; setFont('bold 46px "Courier New"'); ctx.fillText('SUPER MARIO BROS.', canvas.width/2, 160);
+    ctx.fillStyle='#fff';    setFont('bold 22px "Courier New"'); ctx.fillText('PROCEDURAL INFINITE', canvas.width/2, 210);
+    if (Math.floor(Date.now()/400)%2===0) { setFont('20px "Courier New"'); ctx.fillText('DRÜCKE ENTER ZUM STARTEN', canvas.width/2, 330); }
     ctx.textAlign='left';
 }
 function drawEndScreen(title, color, sub) {
     ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle=color; ctx.font='bold 42px "Courier New"'; ctx.textAlign='center';
+    ctx.fillStyle=color; setFont('bold 42px "Courier New"'); ctx.textAlign='center';
     ctx.fillText(title, canvas.width/2, canvas.height/2-10);
-    ctx.fillStyle='#fff'; ctx.font='20px "Courier New"';
+    ctx.fillStyle='#fff'; setFont('20px "Courier New"');
     ctx.fillText(sub, canvas.width/2, canvas.height/2+40);
     ctx.textAlign='left';
 }
