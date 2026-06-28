@@ -1095,7 +1095,7 @@ function draw() {
     ctx.fillRect(fx + 28, fy + 13, 4, 4);
     ctx.fillRect(fx + 18, fy + 21, 12, 3);
 
-    drawPlayer(ctx, player);
+  drawPlayer(ctx, player);
 
     ctx.restore();
 
@@ -1103,6 +1103,16 @@ function draw() {
     ctx.fillText('MARIO   SCORE', 30, 35);
     ctx.fillText(` 0000    ${score.toString().padStart(4,'0')}`, 30, 60);
     ctx.fillText(`WORLD 5-${currentLevel}`, canvas.width - 160, 35);
+
+    // --- START-KNOPF WÄHREND DES SPIELS AUSBLENDEN ---
+    const startBtn = document.getElementById('btnStart');
+    if (startBtn) {
+        if (gameState === 'PLAYING' || gameState === 'WINNING' || gameState === 'DYING') {
+            startBtn.style.display = 'none';
+        } else {
+            startBtn.style.display = 'flex'; // Wieder einblenden im Menü, Game Over & Win-Screen
+        }
+    }
 
     if (gameState === 'MENU')     drawMenu();
     if (gameState === 'GAMEOVER') drawEndScreen('GAME OVER',    '#ff3333', 'Drücke "R" für Neustart');
