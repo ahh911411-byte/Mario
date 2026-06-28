@@ -116,6 +116,39 @@
             border-radius: 6px;
             pointer-events: auto;
         }
+		/* Spezifische Anpassungen für iPads / Tablets */
+@media (min-width: 768px) {
+    #touchControls {
+        height: 140px; /* Mehr Platz nach oben für die größeren Knöpfe */
+    }
+    .dpad {
+        width: 156px;  /* 30% größer (vorher 120px) */
+        height: 156px; /* 30% größer (vorher 120px) */
+    }
+    #btnLeft {
+        top: 52px;
+        width: 59px;   /* 30% größer (vorher 45px) */
+        height: 52px;  /* 30% größer (vorher 40px) */
+        font-size: 1.8rem;
+    }
+    #btnRight {
+        top: 52px;
+        width: 59px;   /* 30% größer (vorher 45px) */
+        height: 52px;  /* 30% größer (vorher 40px) */
+        font-size: 1.8rem;
+    }
+    #btnDown {
+        left: 52px;
+        width: 52px;   /* 30% größer (vorher 40px) */
+        height: 59px;  /* 30% größer (vorher 45px) */
+        font-size: 1.8rem;
+    }
+    .action-btn {
+        width: 72px;   /* Minimal größer (vorher 65px) */
+        height: 72px;  /* Minimal größer (vorher 65px) */
+        font-size: 1.4rem;
+    }
+}
     </style>
 </head>
 <body>
@@ -267,6 +300,11 @@ function setupTouchControls() {
     if (isTouch) {
         document.getElementById('touchControls').style.display = 'flex';
         document.getElementById('keyboardHint').style.display = 'none';
+        
+        // Wenn es ein Touch-Gerät ist UND der Bildschirm die typische iPad-Breite (oder mehr) hat
+        if (window.innerWidth >= 768) {
+            document.getElementById('btnStart').textContent = 'START';
+        }
     }
     const bind = (id, press, release) => {
         const el = document.getElementById(id);
