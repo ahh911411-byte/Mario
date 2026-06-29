@@ -103,7 +103,7 @@
         #btnLeft  { position: absolute; left: 0;   top: 40px; width: 45px; height: 40px; }
         #btnRight { position: absolute; right: 0;  top: 40px; width: 45px; height: 40px; }
         #btnDown  { position: absolute; left: 40px; bottom: 0; width: 40px; height: 45px; }
-        .action-buttons { gap: 15px; display: flex; flex-direction: row; }
+        .action-buttons { gap: 15px; display: flex; flex-direction: row; align-items: center; }
         .action-btn { width: 65px; height: 65px; border-radius: 50%; font-size: 1.2rem; }
         #btnStart {
             position: absolute;
@@ -139,7 +139,7 @@
         </div>
         <div class="touch-btn" id="btnStart">START / R (Reset)</div>
         <div class="action-buttons">
-            <div class="touch-btn action-btn" id="btnShoot" style="background: rgba(255,50,50,0.3); border-color: rgba(255,100,100,0.7);">🔥</div>
+            <div class="touch-btn action-btn" id="btnShoot" style="background: rgba(255,50,50,0.3); border-color: rgba(255,100,100,0.7); display: none;">🔥</div>
             <div class="touch-btn action-btn" id="btnJump">▲</div>
         </div>
     </div>
@@ -162,7 +162,6 @@ let isNight = false;
 function updateSkyColor() {
     skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     if (inSubLevel) {
-        // Düsteres, edleres Sci-Fi Cyber-Untergrund-Blau
         skyGradient.addColorStop(0,    '#05070f');
         skyGradient.addColorStop(0.5,  '#0b1124');
         skyGradient.addColorStop(1.0,  '#141b3a');
@@ -350,7 +349,6 @@ function generateProceduralLevel() {
     const endX = 2400;
     const holeChance = Math.min(0.08 + currentLevel * 0.02, 0.25);
     
-    // Logik für exakt EINE rote Röhre bei Modulo 3
     const isMod3Level = (currentLevel % 3 === 0);
     let redPipeSpawned = false;
 
@@ -366,13 +364,12 @@ function generateProceduralLevel() {
             platforms.push({ x: currentX, y: 400, width: w, height: 50, type: 'ground' });
             const s = Math.random();
             if (s < 0.45) {
-                // Bestimme Röhrenfarbe
                 let finalPipeType = 'pipe';
                 if (isMod3Level && !redPipeSpawned) {
                     finalPipeType = 'pipe_red';
-                    redPipeSpawned = true; // Exakt eine garantierte rote Röhre platziert
+                    redPipeSpawned = true;
                 } else if (Math.random() < 0.15) {
-                    finalPipeType = 'pipe_red'; // Unabhängige 15%-Chance
+                    finalPipeType = 'pipe_red';
                 }
                 
                 platforms.push({ x: currentX + 60, y: 320, width: 64, height: 80, type: finalPipeType });
@@ -390,7 +387,6 @@ function generateProceduralLevel() {
     flagPole.x = endX + 120;
 }
 
-// --- RÖHREN LEVEL SYSTEM FUNKTIONEN ---
 function checkPipeTeleport() {
     if (gameState !== 'PLAYING') return;
     
@@ -403,10 +399,9 @@ function checkPipeTeleport() {
                 pipeAnimationTimer = 0;
                 targetPipeObj = p;
                 player.velocityX = 0;
-                player.x = p.x + (p.width - player.width) / 2; // Perfekt zentrieren
+                player.x = p.x + (p.width - player.width) / 2;
                 playSound(soundPowerUp);
                 
-                // Wir rutschen IMMER zuerst nach unten durch die Röhre
                 pipeAnimationType = 'DOWN';
                 break;
             }
@@ -417,9 +412,8 @@ function checkPipeTeleport() {
 function generateSubLevel() {
     platforms = []; coins = []; enemies = []; fireballs = []; flowers = []; activeLuckyCoins = [];
     
-    // Start-Plattform mit Eingangs-Röhre
     platforms.push({ x: 0, y: 400, width: 400, height: 50, type: 'ground' });
-    platforms.push({ x: 150, y: 320, width: 64, height: 80, type: 'pipe_red_inoperative' }); // Dekorative Röhre ohne Funktion am Start
+    platforms.push({ x: 150, y: 320, width: 64, height: 80, type: 'pipe_red_inoperative' });
 
     let currentX = 400;
     const endX = 1400;
@@ -436,13 +430,11 @@ function generateSubLevel() {
         currentX += 280;
     }
 
-    // End-Plattform mit der Ziel-Röhre zum Verlassen
     platforms.push({ x: endX, y: 400, width: 400, height: 50, type: 'ground' });
-    platforms.push({ x: endX + 150, y: 320, width: 64, height: 80, type: 'pipe_red' }); // Rote Rote Röhre triggert die Rückkehr
+    platforms.push({ x: endX + 150, y: 320, width: 64, height: 80, type: 'pipe_red' });
 }
 
 function switchToSubLevel() {
-    // Sichere die Position des Hauptlevels
     backupMainLevel = {
         platforms: platforms,
         coins: coins,
@@ -456,7 +448,6 @@ function switchToSubLevel() {
     updateSkyColor();
     generateSubLevel();
 
-    // Setze Spieler an den Anfang des Untergrunds und lass ihn aus der Röhre herauskommen
     player.x = 150 + (64 - player.width) / 2;
     player.y = 320 + player.height; 
     cameraX = 0;
@@ -470,13 +461,11 @@ function switchToMainLevel() {
     inSubLevel = false;
     updateSkyColor();
 
-    // Stelle Hauptlevel-Zustand wieder her
     platforms = backupMainLevel.platforms;
     coins = backupMainLevel.coins;
     enemies = backupMainLevel.enemies;
     cameraX = backupMainLevel.cameraX;
     
-    // Platziere Spieler IN der Röhre des Hauptlevels, um nach OBEN geschoben zu werden
     player.x = backupMainLevel.playerX;
     player.y = backupMainLevel.playerY + player.height;
 
@@ -536,16 +525,16 @@ function _step(dt) {
     if (gameState === 'PIPE_ANIMATION') {
         pipeAnimationTimer += dt;
         if (pipeAnimationType === 'DOWN') {
-            player.y += 1.2 * mod; // Reingeschoben werden
+            player.y += 1.2 * mod;
             if (pipeAnimationTimer >= 1.0) {
                 if (!inSubLevel) {
                     switchToSubLevel();
                 } else {
-                    switchToMainLevel(); // Am Ende des Untergrunds teleportiert es uns zurück und schiebt uns hoch!
+                    switchToMainLevel();
                 }
             }
         } else if (pipeAnimationType === 'UP') {
-            player.y -= 1.2 * mod; // Rausgeschoben werden
+            player.y -= 1.2 * mod;
             if (pipeAnimationTimer >= 1.0) {
                 gameState = 'PLAYING';
             }
@@ -764,12 +753,10 @@ function _step(dt) {
                     if (plat.type === 'lucky') {
                         plat.type = 'used';
                         
-                        // Zähler für jeden getroffenen Lucky-Block erhöhen
                         luckyBlockCounter++;
                         
-                        // Wenn der Zufall zuschlägt (10% Chance) ODER die Pechsträhne die Garantie auslöst (10. Block)
                         if (Math.random() < 0.10 || luckyBlockCounter === 10) {
-                            luckyBlockCounter = 0; // Zähler bei jedem Spawnen einer Blume zurücksetzen
+                            luckyBlockCounter = 0;
                             flowers.push({
                                 x: plat.x + 4,
                                 y: plat.y,
@@ -781,7 +768,6 @@ function _step(dt) {
                                 state: 'GROW'
                             });
                         } else {
-                            // Wenn kein Glück vorliegt, gibt es wie gewohnt eine Münze
                             score += 1;
                             activeLuckyCoins.push({
                                 x: plat.x + 10,
@@ -975,27 +961,22 @@ function getGroundTexture(plat) {
     const tctx = tex.getContext('2d');
     
     if (inSubLevel) {
-        // Hochwertigerer Cyberpunk / Tech-Untergrund Look
         tctx.fillStyle = '#1a1c2c'; 
         tctx.fillRect(fx, 0, plat.width, plat.height);
         
-        // Gitter-Struktur-Design
         for (let i = 0; i < plat.width; i += 16) {
             tctx.fillStyle = '#29366f';
             tctx.fillRect(fx+i, 0, 1, plat.height);
             tctx.fillRect(fx+i, 16, 16, 1);
             tctx.fillRect(fx+i, 32, 16, 1);
             
-            // Kleine Tech-Punkte
             tctx.fillStyle = '#3b5dc9';
             tctx.fillRect(fx+i+4, 6, 2, 2);
             tctx.fillRect(fx+i+12, 22, 2, 2);
         }
-        // Obere Kante
         tctx.fillStyle = '#3b5dc9'; tctx.fillRect(fx, 0, plat.width, 4);
-        tctx.fillStyle = '#ef7d57'; tctx.fillRect(fx, 4, plat.width, 2); // Neon Linie
+        tctx.fillStyle = '#ef7d57'; tctx.fillRect(fx, 4, plat.width, 2);
     } else {
-        // Klassische Oberwelt
         tctx.fillStyle = '#b84418'; 
         tctx.fillRect(fx, 0, plat.width, plat.height);
         for (let i = 0; i < plat.width; i += 16) {
@@ -1203,7 +1184,6 @@ function draw() {
             ctx.beginPath(); ctx.arc(cx,70,24,0,Math.PI*2); ctx.arc(cx+30,60,34,0,Math.PI*2); ctx.arc(cx+60,70,24,0,Math.PI*2); ctx.fill();
         }
     } else {
-        // Coole Hintergrund-Details für den Untergrund (Kabel / Rohre im Hintergrund)
         ctx.fillStyle = '#14182e';
         ctx.fillRect(cameraX, 80, canvas.width, 8);
         ctx.fillRect(cameraX, 180, canvas.width, 4);
@@ -1218,7 +1198,6 @@ function draw() {
             ctx.drawImage(getGroundTexture(plat), plat._texDrawX, plat.y);
         } else if (plat.type === 'block') {
             if (inSubLevel) {
-                // Untergrund-Spezifische Ziegelsteine
                 drawRetroBlock(plat.x, plat.y, plat.width, plat.height, '#2e3047','#141622','#434766');
             } else {
                 drawRetroBlock(plat.x, plat.y, plat.width, plat.height, '#cc6633','#662200','#ff9966');
@@ -1350,10 +1329,16 @@ function draw() {
     ctx.fillText(` 0000    ${score.toString().padStart(4,'0')}`, 30, 60);
     ctx.fillText(inSubLevel ? "WORLD Bonus" : `WORLD 5-${currentLevel}`, canvas.width - 160, 35);
 
+    // Dynamic Visibility logic for the Touch Shoot button
+    const btnShoot = document.getElementById('btnShoot');
     if (ammo > 0) {
         drawPixelFlame(ctx, 30, 74); 
         ctx.fillStyle='#fff'; setFont('bold 20px "Courier New"');
         ctx.fillText(`x ${ammo.toString().padStart(2, '0')}`, 64, 94);
+        
+        if (btnShoot) btnShoot.style.display = 'flex'; // Einblenden, wenn Munition vorhanden ist
+    } else {
+        if (btnShoot) btnShoot.style.display = 'none'; // Ausblenden, wenn leer
     }
 
     const startBtn = document.getElementById('btnStart');
